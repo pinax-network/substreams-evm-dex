@@ -5,7 +5,7 @@ package:
   url: https://github.com/pinax-network/substreams-evm-extended
   description: Complete Extended-block Uniswap V2 reserves and ordered V3 pool changes
 protobuf:
-  files: [dex-pool-state.proto]
+  files: [dex-pool-state.proto, uniswap-v2-pool-state.proto, uniswap-v3-pool-state.proto]
   importPaths: [../../proto/v1, ../../proto/v1/dex]
 binaries:
   default:
@@ -19,4 +19,3 @@ modules:
     output:
       type: proto:dex.pool_state.v1.BlockPoolState
 network: mainnet
-
