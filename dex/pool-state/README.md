@@ -36,8 +36,18 @@ The protobuf package names, message names, field numbers, field types and oneof
 tags are unchanged: `dex.pool_state.v1`, `uniswap.v2` and `uniswap.v3`. Only the
 pool-state messages live in this repository; unrelated swap/event projections
 were not migrated. Contract ABI sources and generated Rust structs remain in
-the shared `substreams-abis` dependency, reused at the workspace's existing
-v1.5.0 pin (`dex::uniswap::v2::pair::events::Sync` and the V3 pool events).
+the shared `substreams-abis` dependency (`dex::uniswap::v2::pair::events::Sync`
+and the V3 pool events). The workspace pinned it at v1.5.0 until the owner
+directed the substreams 0.8.0 bump (2026-10-05); it now pins tag `v2.0.0`
+(`6d4dd57`), the release of the port to substreams 0.8.0 and
+substreams-ethereum 0.12.0 (pinax-network/substreams-abis#55). On 2,048
+captured BSC blocks (122,288,006–122,289,029 and 123,561,000–123,562,023), the
+committed fixtures and the tests' inputs, the package output is byte-identical
+to the v1.5.0 build. Those blocks cover only the BSC pools active in them whose
+logs match the Uniswap V2 `Sync` and V3 pool event signatures; they are not
+Ethereum mainnet Uniswap coverage. v2.0.0's stricter `decode`
+without `match_log` does not apply: `Sync` uses `match_and_decode` and the V3
+events call `match_log` first.
 All ABI topics must be full 32-byte words before V3 decoding.
 
 The migrated extraction/tests originate from `substreams-evm` revision
@@ -52,11 +62,13 @@ From the repository root, using its pinned Rust toolchain:
 ```sh
 cargo test --offline --locked -p dex-pool-state
 cargo clippy --offline --locked -p dex-pool-state --all-targets -- -D warnings
-cargo build --offline --locked --release --target wasm32-unknown-unknown -p dex-pool-state
+RUSTFLAGS="--remap-path-prefix=$PWD=." cargo build --offline --locked --release --target wasm32-unknown-unknown -p dex-pool-state
 mkdir -p out/pool-state
 substreams pack dex/pool-state/substreams.yaml -o out/pool-state/dex-pool-state-v0.2.0.spkg
 ```
 
+The remap keeps the checkout path out of the WASM, as the package Makefiles
+do, so the module hash does not depend on where the repository is cloned.
 Packing uses local protobufs and the local WASM only; no upstream source or RPC
 connection is needed. Generated packages stay under ignored `out/` unless a
 separately reviewed release explicitly adds one.

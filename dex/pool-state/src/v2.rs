@@ -14,8 +14,8 @@ const SYNC: [u8; 32] = [
 /// token identities, decimal scaling, liquidity qualification or USD prices.
 pub(crate) fn extract(block: &Block) -> Result<pb::BlockPoolCloses, Error> {
     crate::validate_block(block)?;
-    let header = block.header.as_ref().ok_or_else(|| Error::msg("missing block header"))?;
-    let timestamp = header.timestamp.as_ref().ok_or_else(|| Error::msg("missing block timestamp"))?;
+    let header = block.header.as_option().ok_or_else(|| Error::msg("missing block header"))?;
+    let timestamp = header.timestamp.as_option().ok_or_else(|| Error::msg("missing block timestamp"))?;
     if block.hash.len() != 32
         || header.parent_hash.len() != 32
         || header.number != block.number
@@ -105,22 +105,22 @@ mod tests {
     }
     fn block(logs: Vec<Log>) -> Block {
         Block {
-            detail_level: substreams_ethereum::pb::eth::v2::block::DetailLevel::DetaillevelExtended as i32,
+            detail_level: substreams_ethereum::pb::eth::v2::block::DetailLevel::DetaillevelExtended.into(),
             number: 100,
             hash: vec![1; 32],
-            header: Some(BlockHeader {
+            header: buffa::MessageField::some(BlockHeader {
                 number: 100,
                 parent_hash: vec![2; 32],
-                timestamp: Some(Default::default()),
+                timestamp: buffa::MessageField::some(Default::default()),
                 ..Default::default()
             }),
             transaction_traces: vec![TransactionTrace {
-                status: 1,
+                status: 1.into(),
                 calls: vec![Call {
                     logs: logs.clone(),
                     ..Default::default()
                 }],
-                receipt: Some(TransactionReceipt { logs, ..Default::default() }),
+                receipt: buffa::MessageField::some(TransactionReceipt { logs, ..Default::default() }),
                 ..Default::default()
             }],
             ..Default::default()
@@ -165,8 +165,8 @@ mod tests {
             },
         ];
         input.transaction_traces.push(TransactionTrace {
-            status: 2,
-            receipt: Some(TransactionReceipt {
+            status: 2.into(),
+            receipt: buffa::MessageField::some(TransactionReceipt {
                 logs: vec![sync(1, 3, 1, 100000)],
                 ..Default::default()
             }),
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn emits_empty_complete_blocks_with_parent_and_subsecond_time() {
         let mut input = block(vec![]);
-        let timestamp = input.header.as_mut().unwrap().timestamp.as_mut().unwrap();
+        let timestamp = input.header.as_option_mut().unwrap().timestamp.as_option_mut().unwrap();
         timestamp.seconds = 1_700_000_000;
         timestamp.nanos = 123_456_789;
         let output = extract(&input).unwrap();
@@ -194,7 +194,7 @@ mod tests {
     fn incomplete_identity_and_duplicate_positions_fail_instead_of_guessing() {
         assert!(extract(&block(vec![sync(1, 0, 1, 1), sync(2, 0, 2, 2)])).is_err());
         let mut input = block(vec![]);
-        input.header = None;
+        input.header = buffa::MessageField::none();
         assert!(extract(&input).is_err());
         let mut input = block(vec![]);
         input.transaction_traces[0].calls.clear();

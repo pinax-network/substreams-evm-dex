@@ -15,5 +15,5 @@ substreams-ethereum = { workspace = true }
 proto = { path = "../../proto" }
 
 [dev-dependencies]
-prost = { workspace = true }
+buffa = { workspace = true }
 
