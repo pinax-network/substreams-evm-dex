@@ -15,17 +15,17 @@ pub fn project(block: &Block) -> Result<BlockPoolState, Error> {
 }
 
 fn validate_block(block: &Block) -> Result<(), Error> {
-    if block.detail_level != DetailLevel::DetaillevelExtended as i32 {
+    if block.detail_level != DetailLevel::DetaillevelExtended {
         return Err(Error::msg("Extended blocks required"));
     }
     for transaction in &block.transaction_traces {
         if !matches!(
-            TransactionTraceStatus::try_from(transaction.status),
-            Ok(TransactionTraceStatus::Succeeded | TransactionTraceStatus::Failed | TransactionTraceStatus::Reverted)
+            transaction.status.as_known(),
+            Some(TransactionTraceStatus::Succeeded | TransactionTraceStatus::Failed | TransactionTraceStatus::Reverted)
         ) {
             return Err(Error::msg("invalid transaction status"));
         }
-        if transaction.status == TransactionTraceStatus::Succeeded as i32 && transaction.calls.is_empty() {
+        if transaction.status == TransactionTraceStatus::Succeeded && transaction.calls.is_empty() {
             return Err(Error::msg("successful transaction is missing Extended calls"));
         }
     }
@@ -70,18 +70,18 @@ fn combine(v2: pb_v2::BlockPoolCloses, v3: pb_v3::BlockPoolChanges) -> Result<Bl
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prost::Message;
+    use buffa::Message;
     use substreams_ethereum::pb::eth::v2::{BlockHeader, Call, TransactionReceipt, TransactionTrace};
 
     fn extended_block() -> Block {
         Block {
-            detail_level: DetailLevel::DetaillevelExtended as i32,
+            detail_level: DetailLevel::DetaillevelExtended.into(),
             number: 100,
             hash: vec![1; 32],
-            header: Some(BlockHeader {
+            header: buffa::MessageField::some(BlockHeader {
                 number: 100,
                 parent_hash: vec![2; 32],
-                timestamp: Some(Default::default()),
+                timestamp: buffa::MessageField::some(Default::default()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -91,14 +91,14 @@ mod tests {
     #[test]
     fn empty_extended_blocks_and_successful_empty_calls_emit_complete_headers() {
         let mut input = extended_block();
-        let timestamp = input.header.as_mut().unwrap().timestamp.as_mut().unwrap();
+        let timestamp = input.header.as_option_mut().unwrap().timestamp.as_option_mut().unwrap();
         timestamp.seconds = 1_700_000_000;
         timestamp.nanos = 123_456_789;
         for with_transaction in [false, true] {
             if with_transaction {
                 // Complete call data is sufficient; receipts are not consulted.
                 input.transaction_traces.push(TransactionTrace {
-                    status: TransactionTraceStatus::Succeeded as i32,
+                    status: TransactionTraceStatus::Succeeded.into(),
                     calls: vec![Call::default()],
                     ..Default::default()
                 });
@@ -116,7 +116,7 @@ mod tests {
     fn base_and_unknown_detail_are_rejected_even_without_transactions() {
         for detail_level in [DetailLevel::DetaillevelBase as i32, -1, 99] {
             let mut input = extended_block();
-            input.detail_level = detail_level;
+            input.detail_level = detail_level.into();
             assert!(project(&input).is_err());
         }
     }
@@ -126,8 +126,8 @@ mod tests {
         for receipt in [None, Some(TransactionReceipt::default())] {
             let mut input = extended_block();
             input.transaction_traces.push(TransactionTrace {
-                status: TransactionTraceStatus::Succeeded as i32,
-                receipt,
+                status: TransactionTraceStatus::Succeeded.into(),
+                receipt: receipt.into(),
                 ..Default::default()
             });
             assert!(project(&input).is_err());
@@ -139,7 +139,7 @@ mod tests {
         for status in [-1, 0, 4] {
             let mut input = extended_block();
             input.transaction_traces.push(TransactionTrace {
-                status,
+                status: status.into(),
                 calls: vec![Call::default()],
                 ..Default::default()
             });
@@ -152,14 +152,14 @@ mod tests {
         for mutation in 0..9 {
             let mut input = extended_block();
             match mutation {
-                0 => input.header = None,
+                0 => input.header = buffa::MessageField::none(),
                 1 => input.hash.pop().map(|_| ()).unwrap(),
-                2 => input.header.as_mut().unwrap().number += 1,
-                3 => input.header.as_mut().unwrap().parent_hash.clear(),
-                4 => input.header.as_mut().unwrap().timestamp = None,
-                5 => input.header.as_mut().unwrap().timestamp.as_mut().unwrap().seconds = -1,
-                6 => input.header.as_mut().unwrap().timestamp.as_mut().unwrap().nanos = -1,
-                7 => input.header.as_mut().unwrap().timestamp.as_mut().unwrap().nanos = 1_000_000_000,
+                2 => input.header.as_option_mut().unwrap().number += 1,
+                3 => input.header.as_option_mut().unwrap().parent_hash.clear(),
+                4 => input.header.as_option_mut().unwrap().timestamp = buffa::MessageField::none(),
+                5 => input.header.as_option_mut().unwrap().timestamp.as_option_mut().unwrap().seconds = -1,
+                6 => input.header.as_option_mut().unwrap().timestamp.as_option_mut().unwrap().nanos = -1,
+                7 => input.header.as_option_mut().unwrap().timestamp.as_option_mut().unwrap().nanos = 1_000_000_000,
                 _ => input.hash.push(0),
             }
             assert!(project(&input).is_err(), "accepted mutation {mutation}");
@@ -194,25 +194,27 @@ mod tests {
                     pb_v3::PoolChange {
                         block_log_index: 2,
                         ordinal: 20,
-                        change: Some(pb_v3::pool_change::Change::Swap(pb_v3::PoolPriceState {
+                        change: Some(pb_v3::pool_change::Change::Swap(Box::new(pb_v3::PoolPriceState {
                             sqrt_price_x96: "79228162514264337593543950336".into(),
                             tick: -1,
                             liquidity: "10".into(),
-                        })),
+                        }))),
                     },
                     pb_v3::PoolChange {
                         block_log_index: 3,
                         ordinal: 30,
-                        change: Some(pb_v3::pool_change::Change::Liquidity(pb_v3::PoolLiquidityChange {
+                        change: Some(pb_v3::pool_change::Change::Liquidity(Box::new(pb_v3::PoolLiquidityChange {
                             tick_lower: -100,
                             tick_upper: 100,
                             liquidity_delta: "-7".into(),
-                        })),
+                        }))),
                     },
                     pb_v3::PoolChange {
                         block_log_index: 4,
                         ordinal: 40,
-                        change: Some(pb_v3::pool_change::Change::Invalid(pb_v3::InvalidPoolChange { event_name: "Swap".into() })),
+                        change: Some(pb_v3::pool_change::Change::Invalid(Box::new(pb_v3::InvalidPoolChange {
+                            event_name: "Swap".into(),
+                        }))),
                     },
                 ],
             }],
@@ -223,7 +225,7 @@ mod tests {
     fn both_protocols_round_trip_without_losing_precision_order_or_invalid_markers() {
         let (v2, v3) = fixture();
         let output = combine(v2.clone(), v3.clone()).unwrap();
-        let output = BlockPoolState::decode(output.encode_to_vec().as_slice()).unwrap();
+        let output = BlockPoolState::decode_from_slice(output.encode_to_vec().as_slice()).unwrap();
         assert_eq!(output.v2_pools, v2.pools);
         assert_eq!(output.v3_pools, v3.pools);
         assert_eq!(output.timestamp_nanos, 456);
