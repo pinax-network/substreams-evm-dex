@@ -62,13 +62,15 @@ From the repository root, using its pinned Rust toolchain:
 ```sh
 cargo test --offline --locked -p dex-pool-state
 cargo clippy --offline --locked -p dex-pool-state --all-targets -- -D warnings
-RUSTFLAGS="--remap-path-prefix=$PWD=." cargo build --offline --locked --release --target wasm32-unknown-unknown -p dex-pool-state
+RUSTFLAGS="--remap-path-prefix=$PWD=. --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$(rustc --print sysroot)/lib/rustlib/src/rust=/rustc/$(rustc -vV | sed -n 's/^commit-hash: //p')" cargo build --offline --locked --release --target wasm32-unknown-unknown -p dex-pool-state
 mkdir -p out/pool-state
 substreams pack dex/pool-state/substreams.yaml -o out/pool-state/dex-pool-state-v0.2.0.spkg
 ```
 
-The remap keeps the checkout path out of the WASM, as the package Makefiles
-do, so the module hash does not depend on where the repository is cloned.
+The remaps keep the checkout, `CARGO_HOME` and Rust source paths out of the
+WASM, as the package Makefiles do through `build.mk`, so the module hash does
+not depend on where the repository is cloned, who builds it or whether
+rust-src is installed.
 Packing uses local protobufs and the local WASM only; no upstream source or RPC
 connection is needed. Generated packages stay under ignored `out/` unless a
 separately reviewed release explicitly adds one.
