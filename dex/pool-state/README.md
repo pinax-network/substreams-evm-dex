@@ -24,6 +24,10 @@ must independently verify pool/token identity, establish V3 initial state and
 maintain uninterrupted canonical block continuity. This package does not supply
 decimals, USD conversion, price policy, admission or a TWAP.
 
+`map_events` wraps `dex_pool_state::project(&Block)`. The crate is also an
+`rlib`, so a host program that decodes Extended blocks itself can call
+`project` without the Substreams runtime and get the same `BlockPoolState`.
+
 ## Migration and compatibility
 
 This package replaces `substreams-evm/dex-pool-state` and its separate V2/V3
