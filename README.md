@@ -7,8 +7,8 @@ tables.
 | Package | Status | Output |
 | --- | --- | --- |
 | [`dex/pool-state`](dex/pool-state/README.md) | imported from substreams-evm-extended | `dex.pool_state.v1.BlockPoolState`: Uniswap V2 reserves and ordered V3 pool changes from Extended blocks |
-| `dex/pools` | to port from substreams-evm | pool creations per protocol |
-| `dex/swaps` | to port from substreams-evm | `dex.swaps.v1.Events`: swaps, fees and initializations of every supported protocol |
+| [`dex/pools`](dex/pools/README.md) | ported from substreams-evm `dex-swaps-pools` v0.8.0 | `store_pools` (`set_if_not_exists`) and `dex.foundational_store.v1.Pools`: pool tokens and factory from pool creations |
+| [`dex/swaps`](dex/swaps/README.md) | ported from substreams-evm `dex-swaps` v0.8.0 | `dex.swaps.v1.Events`: swaps, fees and initializations of every supported protocol |
 | `evm-dex` | to port from substreams-evm | `db_out` into the Token API DEX tables, with the ClickHouse SQL |
 
 ## Roadmap
@@ -16,7 +16,8 @@ tables.
 1. Workspace, toolchain and CI; `dex/pool-state` and its protos.
 2. Port `dex-swaps-pools` and `dex-swaps` from substreams-evm `v0.8.0` to
    substreams 0.8 and buffa, with captured-block fixtures and offline parity
-   against the original.
+   against the original. The code, synthetic tests and a differential check
+   against v0.8.0 are in; captured-block fixtures are not.
 3. Port `evm-dex` `db_out` and its ClickHouse SQL; check the Token API
    queries offline, then parity against the production tables.
 4. Release `v0.9.0` and deploy per chain as `<chain>:evm-dex@v0.9.0`.
