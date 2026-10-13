@@ -9,12 +9,71 @@ macro_rules! include_buffa {
     };
 }
 
+pub mod aerodrome {
+    pub mod v1 {
+        include_buffa!("aerodrome.v1");
+    }
+}
+pub mod balancer {
+    pub mod v1 {
+        include_buffa!("balancer.v1");
+    }
+}
+pub mod bancor {
+    pub mod v1 {
+        include_buffa!("bancor.v1");
+    }
+}
+pub mod cow {
+    pub mod v1 {
+        include_buffa!("cow.v1");
+    }
+}
+pub mod curvefi {
+    pub mod v1 {
+        include_buffa!("curvefi.v1");
+    }
+}
+pub mod dodo {
+    pub mod v1 {
+        include_buffa!("dodo.v1");
+    }
+}
+pub mod kyber_elastic {
+    pub mod v1 {
+        include_buffa!("kyber_elastic.v1");
+    }
+}
+pub mod sunpump {
+    pub mod v1 {
+        include_buffa!("sunpump.v1");
+    }
+}
+pub mod traderjoe {
+    pub mod v1 {
+        include_buffa!("traderjoe.v1");
+    }
+}
+/// `uniswap.v2` and `uniswap.v3` each hold two files: the raw events of
+/// `dex/uniswap-v2` and `dex/uniswap-v3` and the pool state of
+/// `dex/pool-state`. Their message names are disjoint.
 pub mod uniswap {
+    pub mod v1 {
+        include_buffa!("uniswap.v1");
+    }
     pub mod v2 {
         include_buffa!("uniswap.v2");
     }
     pub mod v3 {
         include_buffa!("uniswap.v3");
+    }
+    pub mod v4 {
+        include_buffa!("uniswap.v4");
+    }
+}
+pub mod woofi {
+    pub mod v1 {
+        include_buffa!("woofi.v1");
     }
 }
 pub mod dex {
