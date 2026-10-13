@@ -98,8 +98,8 @@ Every source file comes from substreams-evm `9663b25` (tag `evm-dex-v0.8.0`):
 | `src/{uniswap_v3,uniswap_v4,kyber_elastic}.rs` | same names | direction helpers take `&[u8]` |
 | all protocol modules | same names | buffa: `Protocol` as `EnumValue`, boxed oneof variants via `Log::from` |
 | `substreams.yaml` | `dex-swaps/substreams.yaml` | version v0.9.0, imports `../pools/substreams.yaml` as `dex_pools` instead of the v0.8.0 spkg; same module |
-| `../../common/src/create.rs` | `common/src/create.rs` | only the `dex.swaps.v1` templates; no synthetic-log template |
-| `../../common/src/lib.rs` | `common/src/lib.rs` | only `bigint_to_u64` |
+| `../../common/src/create.rs` | `common/src/create.rs` | the `dex.swaps.v1` templates, from one macro shared with the per-protocol packages; values unchanged |
+| `../../common/src/lib.rs` | `common/src/lib.rs` | `bigint_to_u64` (the per-protocol packages add `bigint_to_i32` and `try_to_u64`) |
 | `../../proto/v1/dex-swaps.proto` | `proto/v1/dex-swaps.proto` | none (byte-identical) |
 
 The tests in `common/src/create.rs` port `common/tests/create_log_tests.rs`;
