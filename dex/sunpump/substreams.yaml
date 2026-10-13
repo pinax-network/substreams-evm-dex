@@ -1,0 +1,24 @@
+specVersion: v0.1.0
+package:
+  name: sunpump
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    SunPump launchpad events (sunpump.v1.Events). Ported from substreams-evm
+    dex/sunpump v0.8.0.
+protobuf:
+  files: [sunpump.proto]
+  importPaths: [../../proto/v1/dex]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/sunpump.wasm
+modules:
+  - name: map_events
+    kind: map
+    doc: SunPump LaunchPad events including TokenCreate, TokenPurchased, TokenSold, TokenLaunched, and configuration changes
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:sunpump.v1.Events
+network: tron

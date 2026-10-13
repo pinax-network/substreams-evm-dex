@@ -1,0 +1,24 @@
+specVersion: v0.1.0
+package:
+  name: curvefi
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    CurveFi pool, CryptoSwap and factory events, plus direct StableSwap
+    deployments (curvefi.v1.Events). Ported from substreams-evm dex/curvefi
+    v0.8.0.
+protobuf:
+  files: [curvefi.proto]
+  importPaths: [../../proto/v1/dex]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/curvefi.wasm
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:curvefi.v1.Events
+network: tron

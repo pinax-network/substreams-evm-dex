@@ -8,10 +8,16 @@ license = { workspace = true }
 [lib]
 crate-type = ["rlib"]
 
+[features]
+# Synthetic blocks and ABI encoding for the packages' tests (`common::testing`);
+# enabled only through their dev-dependencies, so no WASM build carries it.
+testing = ["dep:tiny-keccak"]
+
 [dependencies]
 substreams = { workspace = true }
 substreams-ethereum = { workspace = true }
 proto = { path = "../proto" }
+tiny-keccak = { version = "2.0.2", features = ["keccak"], optional = true }
 
 [dev-dependencies]
 buffa = { workspace = true }

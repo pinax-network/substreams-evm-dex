@@ -7,6 +7,22 @@ members = [
   "dex/pools",
   "dex/swaps",
   "evm-dex",
+  # Per-protocol raw events, and the foundational store built on them.
+  "dex/aerodrome",
+  "dex/balancer",
+  "dex/bancor",
+  "dex/cow",
+  "dex/curvefi",
+  "dex/dodo",
+  "dex/foundational-store",
+  "dex/kyber-elastic",
+  "dex/sunpump",
+  "dex/traderjoe",
+  "dex/uniswap-v1",
+  "dex/uniswap-v2",
+  "dex/uniswap-v3",
+  "dex/uniswap-v4",
+  "dex/woofi",
 ]
 
 [workspace.package]

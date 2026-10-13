@@ -1,0 +1,23 @@
+specVersion: v0.1.0
+package:
+  name: cow
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    CoW Protocol GPv2Settlement events (cow.v1.Events). Ported from
+    substreams-evm dex/cow v0.8.0.
+protobuf:
+  files: [cow.proto]
+  importPaths: [../../proto/v1/dex]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/cow.wasm
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:cow.v1.Events
+network: mainnet
