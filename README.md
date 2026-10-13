@@ -9,7 +9,7 @@ tables.
 | [`dex/pool-state`](dex/pool-state/README.md) | imported from substreams-evm-extended | `dex.pool_state.v1.BlockPoolState`: Uniswap V2 reserves and ordered V3 pool changes from Extended blocks |
 | [`dex/pools`](dex/pools/README.md) | ported from substreams-evm `dex-swaps-pools` v0.8.0 | `store_pools` (`set_if_not_exists`) and `dex.foundational_store.v1.Pools`: pool tokens and factory from pool creations |
 | [`dex/swaps`](dex/swaps/README.md) | ported from substreams-evm `dex-swaps` v0.8.0 | `dex.swaps.v1.Events`: swaps, fees and initializations of every supported protocol |
-| `evm-dex` | to port from substreams-evm | `db_out` into the Token API DEX tables, with the ClickHouse SQL |
+| [`evm-dex`](evm-dex/README.md) | ported from substreams-evm `evm-dex` v0.8.0 | `db_out` into the Token API DEX ClickHouse tables, with their SQL embedded in the package |
 
 ## Roadmap
 

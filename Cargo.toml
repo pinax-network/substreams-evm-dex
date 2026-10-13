@@ -6,6 +6,7 @@ members = [
   "dex/pool-state",
   "dex/pools",
   "dex/swaps",
+  "evm-dex",
 ]
 
 [workspace.package]

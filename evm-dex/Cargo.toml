@@ -1,0 +1,23 @@
+[package]
+name = "evm-dex"
+description = "One db_out writing dex.swaps.v1 swaps, swap fees and pool initializations into the Token API DEX ClickHouse tables"
+edition = { workspace = true }
+version = "0.9.0"
+license = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+substreams = { workspace = true }
+# 5.0.0 (buffa, substreams 0.8.0). v0.8.0 used 3.0.0; the rows are the same,
+# and each Field now also carries update_op = SET (README).
+substreams-database-change = "=5.0.0"
+buffa = { workspace = true }
+proto = { path = "../proto" }
+# Tron Base58Check addresses, with the crates v0.8.0's common crate used.
+bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+buffa-types = { workspace = true }
