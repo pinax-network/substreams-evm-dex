@@ -1,0 +1,9 @@
+# Inputs for `buf generate` (run in this directory) of src/pb. The manifests
+# import these files by bare name (dex/pool-state with importPaths
+# [proto/v1, proto/v1/dex]), so both directories are module roots and v1/dex
+# is excluded from the v1 module.
+version: v2
+modules:
+  - path: v1
+    excludes: [v1/dex]
+  - path: v1/dex
