@@ -22,6 +22,8 @@ Sibling repositories:
 | [`dex/swaps`](dex/swaps/README.md) (`dex_swaps` v0.9.0) | `map_events` (imports `dex_pools`) | `dex.swaps.v1.Events`: `Swap`, `SwapFee` and `Initialize` per transaction, for every supported protocol |
 | [`evm-dex`](evm-dex/README.md) (`evm_dex` v0.9.0) | `db_out` (imports `dex_swaps`) | `DatabaseChanges` into the Token API DEX tables; the ClickHouse SQL is embedded in the package |
 | [`dex/pool-state`](dex/pool-state/README.md) (`dex_pool_state` v0.2.0) | `map_events` | `dex.pool_state.v1.BlockPoolState`: Uniswap V2 reserves and ordered V3 pool changes from Extended blocks |
+| `dex/<protocol>` (14 packages, v0.9.0) | `map_events` | every raw event of one protocol, as `<protocol>.v1.Events`: [`aerodrome`](dex/aerodrome/README.md), [`balancer`](dex/balancer/README.md), [`bancor`](dex/bancor/README.md), [`cow`](dex/cow/README.md), [`curvefi`](dex/curvefi/README.md), [`dodo`](dex/dodo/README.md), [`kyber-elastic`](dex/kyber-elastic/README.md), [`sunpump`](dex/sunpump/README.md), [`traderjoe`](dex/traderjoe/README.md), [`uniswap-v1`](dex/uniswap-v1/README.md) to [`uniswap-v4`](dex/uniswap-v4/README.md), [`woofi`](dex/woofi/README.md) |
+| [`dex/foundational-store`](dex/foundational-store/README.md) (`evm_dex_foundational_store` v0.9.0) | `map_entries` (imports 11 protocol packages) | `sf.substreams.foundational_store.model.v2.SinkEntries`: each pool's tokens and factory, first writer wins, for a foundational store |
 
 ```
 sf.ethereum.type.v2.Block ──▶ dex_pools:store_pools ──┐
@@ -74,7 +76,10 @@ for block in blocks {                       // decoded dex_swaps::eth::Block
 }
 ```
 
-`dex_pool_state::project(&block)` needs no state across blocks.
+`dex_pool_state::project(&block)` and every protocol package's
+`project(&block)` (for example `uniswap_v3::project`, the raw events as
+`uniswap.v3.Events`) need no state across blocks; each crate's README names
+its API.
 
 ## Build and test
 
@@ -101,12 +106,14 @@ v0.5.0 today: check parity against its tables before the Token API switches.
 
 ## Provenance and status
 
-- **Ported, output unchanged.** `dex/pools`, `dex/swaps`, `common` and
-  `evm-dex` come from substreams-evm tag `evm-dex-v0.8.0` (`9663b25`). Each
-  package README records its sources.
+- **Ported, output unchanged.** `dex/pools`, `dex/swaps`, `common`,
+  `evm-dex`, the 14 protocol packages and `dex/foundational-store` come from
+  substreams-evm tag `evm-dex-v0.8.0` (`9663b25`). Each package README
+  records its sources.
 - **Checked offline only.** Differential tests against v0.8.0 run
   unmodified gave 0 mismatches: 120,000 synthetic blocks for pools and swaps,
-  and 120,000 synthetic cases for `db_out`. The schema loads in
+  120,000 synthetic cases for `db_out`, and 120,000 synthetic blocks (about
+  1.8M outputs) for the protocol packages. The schema loads in
   clickhouse-local. No captured blocks yet, and nothing is live-qualified.
 - **Questionable v0.8.0 behaviour kept for the owner to decide.** The lists
   are in [`dex/swaps`](dex/swaps/README.md#kept-from-v080) and
@@ -117,9 +124,8 @@ v0.5.0 today: check parity against its tables before the Token API switches.
   (formerly substreams-evm-extended). The owner's hold on its live checks
   stays in force.
 
-Next: the per-protocol raw-event packages, a CI job that checks committed
-package hashes, a release workflow, captured-block fixtures and the `v0.9.0`
-release.
+Next: a CI job that checks committed package hashes, a release workflow,
+captured-block fixtures and the `v0.9.0` release.
 
 See [AGENTS.md](AGENTS.md) for the rules of this repository.
 

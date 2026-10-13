@@ -1,0 +1,23 @@
+specVersion: v0.1.0
+package:
+  name: woofi
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    WOOFi WooPPV2 WooSwap events (woofi.v1.Events). Ported from substreams-evm
+    dex/woofi v0.8.0.
+protobuf:
+  files: [woofi.proto]
+  importPaths: [../../proto/v1/dex]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/woofi.wasm
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:woofi.v1.Events
+network: mainnet

@@ -37,6 +37,10 @@ and taking over the DEX code of `pinax-network/substreams-evm`.
   behaviour that looks wrong (the "Kept from v0.8.0" sections of
   `dex/swaps/README.md` and `evm-dex/README.md`); changing it is a separate
   change the owner approves.
+- The per-protocol raw-event packages (`dex/<protocol>`) and
+  `dex/foundational-store` are ported the same way, from tag
+  `evm-dex-v0.8.0`, and likewise keep v0.8.0's output (each README's "Kept
+  from v0.8.0").
 
 ## Toolchain and validation
 

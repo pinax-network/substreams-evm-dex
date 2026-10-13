@@ -1,0 +1,27 @@
+[package]
+name = "evm-dex-foundational-store"
+description = "Foundational-store entries (pool tokens and factory) from the per-protocol DEX packages' pool creations"
+edition = { workspace = true }
+version = "0.9.0"
+license = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+substreams = { workspace = true }
+proto = { path = "../../proto" }
+
+[dev-dependencies]
+common = { path = "../../common", features = ["testing"] }
+aerodrome = { path = "../aerodrome" }
+balancer = { path = "../balancer" }
+bancor = { path = "../bancor" }
+curvefi = { path = "../curvefi" }
+kyber-elastic = { path = "../kyber-elastic" }
+sunpump = { path = "../sunpump" }
+traderjoe = { path = "../traderjoe" }
+uniswap-v1 = { path = "../uniswap-v1" }
+uniswap-v2 = { path = "../uniswap-v2" }
+uniswap-v3 = { path = "../uniswap-v3" }
+uniswap-v4 = { path = "../uniswap-v4" }

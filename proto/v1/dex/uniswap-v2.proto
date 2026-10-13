@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package uniswap.v2;
+
+message Events { repeated Transaction transactions = 1; }
+
+message Transaction {
+  bytes hash = 1;
+  bytes from = 2;
+  optional bytes to = 3;
+  uint64 nonce = 5;
+  string gas_price = 6; // uint256
+  uint64 gas_limit = 7;
+  uint64 gas_used = 8;
+  string value = 9; // uint256
+  repeated Log logs = 10;
+}
+
+// https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol
+// https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Factory.sol
+message Log {
+  bytes address = 1;
+  uint64 ordinal = 2;
+  repeated bytes topics = 3;
+  bytes data = 4;
+
+  // Call metadata (only available on chains with DetailLevel: EXTENDED)
+  optional Call call = 5;
+
+  // Native block/log position fields
+  uint32 block_index = 6;
+
+  oneof log {
+    // UniswapV2Pair
+    Swap swap = 10;
+    Sync sync = 11;
+    Mint mint = 12;
+    Burn burn = 13;
+
+    // UniswapV2Factory
+    PairCreated pair_created = 14;
+  }
+}
+
+// Call metadata (only available on chains with DetailLevel: EXTENDED)
+message Call {
+  uint32 index = 1;
+  uint64 begin_ordinal = 2;
+  uint64 end_ordinal = 3;
+  bytes caller = 4;  // sender
+  bytes address = 5; // recipient
+  string value = 6;  // uint256
+  uint64 gas_consumed = 7;
+  uint64 gas_limit = 8;
+  uint32 depth = 9;
+  uint32 parent_index = 10;
+  CallType call_type = 11;
+}
+
+enum CallType {
+  CALL_TYPE_UNSPECIFIED = 0;
+  CALL_TYPE_CALL = 1;
+  CALL_TYPE_CALLCODE = 2;
+  CALL_TYPE_DELEGATE = 3;
+  CALL_TYPE_STATIC = 4;
+  CALL_TYPE_CREATE = 5;
+}
+
+// key = <bytes pair>
+message PairCreated {
+  // STORE primary key
+  bytes pair = 1; // address
+  bytes token0 = 2;
+  bytes token1 = 3;
+  string extra_data = 4;
+}
+
+// StorePool - minimal pool storage type
+// Primary key: pair address
+message StorePool {
+  bytes currency0 = 1; // token0 address
+  bytes currency1 = 2; // token1 address
+  bytes factory = 3;   // factory address that created the pair
+}
+
+message Sync {
+  string reserve0 = 1; // uint112
+  string reserve1 = 2; // uint112
+}
+
+message Swap {
+  bytes sender = 1;
+  string amount0_in = 2;  // uint256
+  string amount0_out = 3; // uint256
+  string amount1_in = 4;  // uint256
+  string amount1_out = 5; // uint256
+  bytes to = 6;           // address
+}
+
+message Mint {
+  bytes sender = 1;   // address
+  string amount0 = 2; // uint256
+  string amount1 = 3; // uint256
+}
+
+message Burn {
+  bytes sender = 1;   // address
+  string amount0 = 2; // uint256
+  string amount1 = 3; // uint256
+  bytes to = 4;       // address
+}

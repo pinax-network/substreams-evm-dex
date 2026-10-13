@@ -1,0 +1,353 @@
+syntax = "proto3";
+
+package curvefi.v1;
+
+message Events { repeated Transaction transactions = 1; }
+
+message Transaction {
+  bytes hash = 1;
+  bytes from = 2;
+  optional bytes to = 3;
+  uint64 nonce = 5;
+  string gas_price = 6; // uint256
+  uint64 gas_limit = 7;
+  uint64 gas_used = 8;
+  string value = 9; // uint256
+  repeated Log logs = 10;
+}
+
+message Log {
+  bytes address = 1;
+  uint64 ordinal = 2;
+  repeated bytes topics = 3;
+  bytes data = 4;
+
+  // Call metadata (only available on chains with DetailLevel: EXTENDED)
+  optional Call call = 5;
+
+  // Native block/log position fields
+  uint32 block_index = 6;
+
+  oneof log {
+    // Pool / StableSwap (shared topic hashes — decoded from any matching contract)
+    TokenExchange token_exchange = 10;
+    AddLiquidity add_liquidity = 11;
+    RemoveLiquidity remove_liquidity = 12;
+    RemoveLiquidityOne remove_liquidity_one = 13;
+    RemoveLiquidityImbalance remove_liquidity_imbalance = 14;
+    CommitNewAdmin commit_new_admin = 15;
+    NewAdmin new_admin = 16;
+    CommitNewFee commit_new_fee = 17;
+    NewFee new_fee = 18;
+    RampA ramp_a = 19;
+    StopRampA stop_ramp_a = 20;
+    // Factory
+    PlainPoolDeployed plain_pool_deployed = 21;
+    MetaPoolDeployed meta_pool_deployed = 22;
+    BasePoolAdded base_pool_added = 23;
+    LiquidityGaugeDeployed liquidity_gauge_deployed = 24;
+    // CryptoSwap (contract-specific: different topic hashes from Pool/StableSwap)
+    CryptoSwapTokenExchange cryptoswap_token_exchange = 25;
+    CryptoSwapAddLiquidity cryptoswap_add_liquidity = 26;
+    CryptoSwapRemoveLiquidity cryptoswap_remove_liquidity = 27;
+    CryptoSwapRemoveLiquidityOne cryptoswap_remove_liquidity_one = 28;
+    CryptoSwapClaimAdminFee cryptoswap_claim_admin_fee = 29;
+    CryptoSwapCommitNewParameters cryptoswap_commit_new_parameters = 30;
+    CryptoSwapNewParameters cryptoswap_new_parameters = 31;
+    CryptoSwapRampAgamma cryptoswap_ramp_agamma = 32;
+    CryptoSwapStopRampA cryptoswap_stop_ramp_a = 33;
+    // CryptoSwapFactory
+    CryptoPoolDeployed crypto_pool_deployed = 34;
+    CryptoSwapFactoryLiquidityGaugeDeployed cryptoswapfactory_liquidity_gauge_deployed = 35;
+    CryptoSwapFactoryTransferOwnership cryptoswapfactory_transfer_ownership = 36;
+    CryptoSwapFactoryUpdateFeeReceiver cryptoswapfactory_update_fee_receiver = 37;
+    CryptoSwapFactoryUpdateGaugeImplementation cryptoswapfactory_update_gauge_implementation = 38;
+    CryptoSwapFactoryUpdatePoolImplementation cryptoswapfactory_update_pool_implementation = 39;
+    CryptoSwapFactoryUpdateTokenImplementation cryptoswapfactory_update_token_implementation = 40;
+    // Direct pool deployment (non-factory): decoded from constructor calldata
+    Init init = 41;
+  }
+}
+
+// Call metadata (only available on chains with DetailLevel: EXTENDED)
+message Call {
+  uint32 index = 1;
+  uint64 begin_ordinal = 2;
+  uint64 end_ordinal = 3;
+  bytes caller = 4;  // sender
+  bytes address = 5; // recipient
+  string value = 6;  // uint256
+  uint64 gas_consumed = 7;
+  uint64 gas_limit = 8;
+  uint32 depth = 9;
+  uint32 parent_index = 10;
+  CallType call_type = 11;
+}
+
+enum CallType {
+  CALL_TYPE_UNSPECIFIED = 0;
+  CALL_TYPE_CALL = 1;
+  CALL_TYPE_CALLCODE = 2;
+  CALL_TYPE_DELEGATE = 3;
+  CALL_TYPE_STATIC = 4;
+  CALL_TYPE_CREATE = 5;
+}
+
+message TokenExchange {
+  bytes buyer = 1;
+  string sold_id = 2;       // int128
+  string tokens_sold = 3;   // uint256
+  string bought_id = 4;     // int128
+  string tokens_bought = 5; // uint256
+}
+
+message AddLiquidity {
+  bytes provider = 1;
+  repeated string token_amounts = 2; // uint256[3]
+  repeated string fees = 3;          // uint256[3]
+  string invariant = 4;              // uint256
+  string token_supply = 5;           // uint256
+}
+
+message RemoveLiquidity {
+  bytes provider = 1;
+  repeated string token_amounts = 2; // uint256[3]
+  repeated string fees = 3;          // uint256[3]
+  string token_supply = 4;           // uint256
+}
+
+message RemoveLiquidityOne {
+  bytes provider = 1;
+  string token_amount = 2; // uint256
+  string coin_amount = 3;  // uint256
+}
+
+message RemoveLiquidityImbalance {
+  bytes provider = 1;
+  repeated string token_amounts = 2; // uint256[3]
+  repeated string fees = 3;          // uint256[3]
+  string invariant = 4;              // uint256
+  string token_supply = 5;           // uint256
+}
+
+message CommitNewAdmin {
+  string deadline = 1; // uint256
+  bytes admin = 2;
+}
+
+message NewAdmin { bytes admin = 1; }
+
+message CommitNewFee {
+  string deadline = 1;  // uint256
+  string fee = 2;       // uint256
+  string admin_fee = 3; // uint256
+}
+
+message NewFee {
+  string fee = 1;       // uint256
+  string admin_fee = 2; // uint256
+}
+
+message RampA {
+  string old_a = 1;        // uint256
+  string new_a = 2;        // uint256
+  string initial_time = 3; // uint256
+  string future_time = 4;  // uint256
+}
+
+message StopRampA {
+  string a = 1; // uint256
+  string t = 2; // uint256
+}
+
+// Store messages
+message PoolInfo {
+  bytes pool_address = 1;
+  bytes provider = 2;
+  string total_liquidity = 3; // uint256
+}
+
+message PlainPoolDeployed {
+  bytes address = 1; // call.address CREATE
+  repeated bytes coins = 2;
+  string A = 3;   // uint256
+  string fee = 4; // uint256
+  bytes deployer = 5;
+}
+
+message MetaPoolDeployed {
+  bytes address = 1; // call.address CREATE
+  bytes coin = 2;
+  bytes base_pool = 3;
+  string A = 4;   // uint256
+  string fee = 5; // uint256
+  bytes deployer = 6;
+}
+
+// StorePool - minimal pool storage type
+// Primary key: pool address
+message StorePool {
+  repeated bytes coins = 1; // array of coin addresses
+  bytes factory = 2;        // factory address that created the pool
+}
+
+message BasePoolAdded { bytes base_pool = 1; }
+
+message LiquidityGaugeDeployed {
+  bytes pool = 1;
+  bytes gauge = 2;
+}
+
+// ── CryptoSwap events (contract-specific: unique topic hashes) ────────────────
+
+// curvefi_cryptoswap_tokenexchange
+// CryptoSwap TokenExchange has a different topic signature to the Pool/StableSwap variant.
+message CryptoSwapTokenExchange {
+  bytes buyer = 1;
+  string sold_id = 2;       // uint256
+  string tokens_sold = 3;   // uint256
+  string bought_id = 4;     // uint256
+  string tokens_bought = 5; // uint256
+}
+
+// curvefi_cryptoswap_addliquidity
+message CryptoSwapAddLiquidity {
+  bytes provider = 1;
+  repeated string token_amounts = 2; // uint256[3]
+  string fee = 3;                    // uint256 (single fee, not per-coin array)
+  string token_supply = 4;           // uint256
+}
+
+// curvefi_cryptoswap_removeliquidity
+message CryptoSwapRemoveLiquidity {
+  bytes provider = 1;
+  repeated string token_amounts = 2; // uint256[3]
+  string token_supply = 3;           // uint256
+}
+
+// curvefi_cryptoswap_removeliquidityone
+message CryptoSwapRemoveLiquidityOne {
+  bytes provider = 1;
+  string token_amount = 2; // uint256
+  string coin_index = 3;   // uint256
+  string coin_amount = 4;  // uint256
+}
+
+// curvefi_cryptoswap_claimadminfee
+message CryptoSwapClaimAdminFee {
+  bytes admin = 1;
+  string tokens = 2; // uint256
+}
+
+// curvefi_cryptoswap_commitnewparameters
+message CryptoSwapCommitNewParameters {
+  string deadline = 1;             // uint256
+  string admin_fee = 2;            // uint256
+  string mid_fee = 3;              // uint256
+  string out_fee = 4;              // uint256
+  string fee_gamma = 5;            // uint256
+  string allowed_extra_profit = 6; // uint256
+  string adjustment_step = 7;      // uint256
+  string ma_half_time = 8;         // uint256
+}
+
+// curvefi_cryptoswap_newparameters
+message CryptoSwapNewParameters {
+  string admin_fee = 1;            // uint256
+  string mid_fee = 2;              // uint256
+  string out_fee = 3;              // uint256
+  string fee_gamma = 4;            // uint256
+  string allowed_extra_profit = 5; // uint256
+  string adjustment_step = 6;      // uint256
+  string ma_half_time = 7;         // uint256
+}
+
+// curvefi_cryptoswap_rampagamma
+message CryptoSwapRampAgamma {
+  string initial_a = 1;     // uint256
+  string future_a = 2;      // uint256
+  string initial_gamma = 3; // uint256
+  string future_gamma = 4;  // uint256
+  string initial_time = 5;  // uint256
+  string future_time = 6;   // uint256
+}
+
+// curvefi_cryptoswap_stoprampa
+message CryptoSwapStopRampA {
+  string current_a = 1;     // uint256
+  string current_gamma = 2; // uint256
+  string time = 3;          // uint256
+}
+
+// ── CryptoSwapFactory events ──────────────────────────────────────────────────
+
+// curvefi_cryptoswapfactory_cryptopooldeployed
+message CryptoPoolDeployed {
+  bytes address = 1;               // call.address CREATE (pool contract)
+  bytes token = 2;                 // LP token address
+  repeated bytes coins = 3;        // [coin0, coin1]
+  string a = 4;                    // uint256
+  string gamma = 5;                // uint256
+  string mid_fee = 6;              // uint256
+  string out_fee = 7;              // uint256
+  string allowed_extra_profit = 8; // uint256
+  string fee_gamma = 9;            // uint256
+  string adjustment_step = 10;     // uint256
+  string admin_fee = 11;           // uint256
+  string ma_half_time = 12;        // uint256
+  string initial_price = 13;       // uint256
+  bytes deployer = 14;
+}
+
+// curvefi_cryptoswapfactory_liquiditygaugedeployed
+// Differs from Factory's LiquidityGaugeDeployed by including the LP token field.
+message CryptoSwapFactoryLiquidityGaugeDeployed {
+  bytes pool = 1;
+  bytes token = 2;
+  bytes gauge = 3;
+}
+
+// curvefi_cryptoswapfactory_transferownership
+message CryptoSwapFactoryTransferOwnership {
+  bytes old_owner = 1;
+  bytes new_owner = 2;
+}
+
+// curvefi_cryptoswapfactory_updatefeereceiver
+message CryptoSwapFactoryUpdateFeeReceiver {
+  bytes old_fee_receiver = 1;
+  bytes new_fee_receiver = 2;
+}
+
+// curvefi_cryptoswapfactory_updategaugeimplementation
+message CryptoSwapFactoryUpdateGaugeImplementation {
+  bytes old_gauge_implementation = 1;
+  bytes new_gauge_implementation = 2;
+}
+
+// curvefi_cryptoswapfactory_updatepoolimplementation
+message CryptoSwapFactoryUpdatePoolImplementation {
+  bytes old_pool_implementation = 1;
+  bytes new_pool_implementation = 2;
+}
+
+// curvefi_cryptoswapfactory_updatetokenimplementation
+message CryptoSwapFactoryUpdateTokenImplementation {
+  bytes old_token_implementation = 1;
+  bytes new_token_implementation = 2;
+}
+
+// ── Direct pool deployment (decoded from constructor calldata) ─────────────────
+
+// curvefi_pool_init
+// Decoded from direct pool deployment (non-factory) __init__ constructor calldata.
+// Captures coins, owner, pool token, and parameters for pools deployed without a factory event.
+message Init {
+  bytes address = 1;        // deployed pool contract address
+  bytes owner = 2;          // _owner (initial admin/owner)
+  repeated bytes coins = 3; // _coins array (2–4 token addresses)
+  bytes pool_token = 4;     // _pool_token LP token address
+  string a = 5;             // _A amplification coefficient (uint256)
+  string fee = 6;           // _fee exchange fee (uint256, scaled 1e10)
+  string admin_fee = 7;     // _admin_fee admin fee fraction (uint256, scaled 1e10)
+}

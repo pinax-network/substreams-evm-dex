@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package uniswap.v4;
+
+message Events { repeated Transaction transactions = 1; }
+
+message Transaction {
+  bytes hash = 1;
+  bytes from = 2;
+  optional bytes to = 3;
+  uint64 nonce = 5;
+  string gas_price = 6; // uint256
+  uint64 gas_limit = 7;
+  uint64 gas_used = 8;
+  string value = 9; // uint256
+  repeated Log logs = 10;
+}
+
+// https://github.com/Uniswap/v4-core/blob/main/src/interfaces/IPoolManager.sol
+// https://github.com/Uniswap/v4-core/blob/59d3ecf53afa9264a16bba0e38f4c5d2231f80bc/src/interfaces/IProtocolFees.sol
+message Log {
+  bytes address = 1;
+  uint64 ordinal = 2;
+  repeated bytes topics = 3;
+  bytes data = 4;
+
+  // Call metadata (only available on chains with DetailLevel: EXTENDED)
+  optional Call call = 5;
+
+  // Native block/log position fields
+  uint32 block_index = 6;
+
+  oneof log {
+    // IPoolManager
+    Swap swap = 10;
+    Initialize initialize = 11;
+    ModifyLiquidity modify_liquidity = 12;
+    Donate donate = 13;
+
+    // IProtocolFees
+    ProtocolFeeControllerUpdated protocol_fee_controller_updated = 14;
+    ProtocolFeeUpdated protocol_fee_updated = 15;
+  }
+}
+
+// Call metadata (only available on chains with DetailLevel: EXTENDED)
+message Call {
+  uint32 index = 1;
+  uint64 begin_ordinal = 2;
+  uint64 end_ordinal = 3;
+  bytes caller = 4;  // sender
+  bytes address = 5; // recipient
+  string value = 6;  // uint256
+  uint64 gas_consumed = 7;
+  uint64 gas_limit = 8;
+  uint32 depth = 9;
+  uint32 parent_index = 10;
+  CallType call_type = 11;
+}
+
+enum CallType {
+  CALL_TYPE_UNSPECIFIED = 0;
+  CALL_TYPE_CALL = 1;
+  CALL_TYPE_CALLCODE = 2;
+  CALL_TYPE_DELEGATE = 3;
+  CALL_TYPE_STATIC = 4;
+  CALL_TYPE_CREATE = 5;
+}
+
+/// @notice Emitted when a new pool is initialized
+/// @param id The abi encoded hash of the pool key struct for the new pool
+/// @param currency0 The first currency of the pool by address sort order
+/// @param currency1 The second currency of the pool by address sort order
+/// @param fee The fee collected upon every swap in the pool, denominated in
+/// hundredths of a bip
+/// @param tickSpacing The minimum number of ticks between initialized ticks
+/// @param hooks The hooks contract address for the pool, or address(0) if none
+/// @param sqrtPriceX96 The price of the pool on initialization
+/// @param tick The initial tick of the pool corresponding to the initialized
+/// price
+message Initialize {
+  // STORE primary key
+  bytes id = 1;              // address (Pool ID)
+  bytes currency0 = 2;       // address (token0)
+  bytes currency1 = 3;       // address (token1)
+  uint64 fee = 4;            // uint24 (e.g., 3000 represents 0.30%)
+  int32 tick_spacing = 5;    // int24 (e.g., 60)
+  bytes hooks = 6;           // address, or address(0) if none
+  string sqrt_price_x96 = 7; // uint160
+  int32 tick = 8;            // int24
+}
+
+// StorePool - minimal pool storage type
+// Primary key: pool id
+message StorePool {
+  bytes currency0 = 1; // token0 address
+  bytes currency1 = 2; // token1 address
+  bytes factory = 3;   // factory address that initialized the pool
+}
+
+/// @notice Emitted for swaps between currency0 and currency1
+/// @param id The abi encoded hash of the pool key struct for the pool that was
+/// modified
+/// @param sender The address that initiated the swap call, and that received
+/// the callback
+/// @param amount0 The delta of the currency0 balance of the pool
+/// @param amount1 The delta of the currency1 balance of the pool
+/// @param sqrtPriceX96 The sqrt(price) of the pool after the swap, as a Q64.96
+/// @param liquidity The liquidity of the pool after the swap
+/// @param tick The log base 1.0001 of the price of the pool after the swap
+/// @param fee The swap fee in hundredths of a bip
+message Swap {
+  bytes id = 1;              // address (Pool ID)
+  bytes sender = 2;          // address
+  string amount0 = 3;        // int256
+  string amount1 = 4;        // int256
+  string sqrt_price_x96 = 5; // uint160
+  string liquidity = 6;      // uint128
+  int32 tick = 7;            // int24
+  string fee = 8;            // int256
+}
+
+/// @notice Emitted when a liquidity position is modified
+/// @param id The abi encoded hash of the pool key struct for the pool that was
+/// modified
+/// @param sender The address that modified the pool
+/// @param tickLower The lower tick of the position
+/// @param tickUpper The upper tick of the position
+/// @param liquidityDelta The amount of liquidity that was added or removed
+/// @param salt The extra data to make positions unique
+message ModifyLiquidity {
+  bytes id = 1;               // address (Pool ID)
+  bytes sender = 2;           // address
+  int32 tick_lower = 3;       // int24
+  int32 tick_upper = 4;       // int24
+  string liquidity_delta = 5; // int128
+  bytes salt = 6;             // bytes32
+}
+
+/// @notice Emitted for donations
+/// @param id The abi encoded hash of the pool key struct for the pool that was
+/// donated to
+/// @param sender The address that initiated the donate call
+/// @param amount0 The amount donated in currency0
+/// @param amount1 The amount donated in currency1
+message Donate {
+  bytes id = 1;       // address (Pool ID)
+  bytes sender = 2;   // address
+  string amount0 = 3; // uint256
+  string amount1 = 4; // uint256
+}
+
+/// @notice Emitted when the protocol fee controller address is updated in
+/// setProtocolFeeController.
+message ProtocolFeeControllerUpdated {
+  bytes protocol_fee_controller = 1; // address
+}
+
+message ProtocolFeeUpdated {
+  bytes id = 1;            // address (Pool ID)
+  uint64 protocol_fee = 2; // uint24
+}

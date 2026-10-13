@@ -1,0 +1,23 @@
+specVersion: v0.1.0
+package:
+  name: traderjoe
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    Trader Joe V2 Liquidity Book pair and factory events
+    (traderjoe.v1.Events). Ported from substreams-evm dex/traderjoe v0.8.0.
+protobuf:
+  files: [traderjoe.proto]
+  importPaths: [../../proto/v1/dex]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/traderjoe.wasm
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:traderjoe.v1.Events
+network: mainnet

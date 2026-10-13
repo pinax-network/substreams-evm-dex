@@ -1,0 +1,23 @@
+specVersion: v0.1.0
+package:
+  name: balancer
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    Balancer V2 weighted pool, V3 stable pool and V3 vault events
+    (balancer.v1.Events). Ported from substreams-evm dex/balancer v0.8.0.
+protobuf:
+  files: [balancer.proto]
+  importPaths: [../../proto/v1/dex]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/balancer.wasm
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:balancer.v1.Events
+network: mainnet

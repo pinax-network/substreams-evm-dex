@@ -1,0 +1,19 @@
+[package]
+name = "uniswap-v3"
+description = "Uniswap V3 pool and factory events, as uniswap.v3.Events"
+edition = { workspace = true }
+version = "0.9.0"
+license = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+substreams = { workspace = true }
+substreams-abis = { workspace = true }
+substreams-ethereum = { workspace = true }
+common = { path = "../../common" }
+proto = { path = "../../proto" }
+
+[dev-dependencies]
+common = { path = "../../common", features = ["testing"] }
