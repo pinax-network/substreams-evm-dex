@@ -32,10 +32,11 @@ and taking over the DEX code of `pinax-network/substreams-evm`.
 - The swaps, pools and `db_out` code is ported from substreams-evm `main`
   (`333e8c8`) and tag `evm-dex-v0.8.0` (`9663b25`), from substreams 0.7.6,
   prost and substreams-abis v1.5.0 to the toolchain below. Record the source
-  commit of every ported file in its package README. `dex/pools`, `dex/swaps`
-  and the `common` crate keep v0.8.0's output exactly, including behaviour
-  that looks wrong (`dex/swaps/README.md`, "Kept from v0.8.0"); changing it
-  is a separate change the owner approves.
+  commit of every ported file in its package README. `dex/pools`, `dex/swaps`,
+  `evm-dex` and the `common` crate keep v0.8.0's output exactly, including
+  behaviour that looks wrong (the "Kept from v0.8.0" sections of
+  `dex/swaps/README.md` and `evm-dex/README.md`); changing it is a separate
+  change the owner approves.
 
 ## Toolchain and validation
 

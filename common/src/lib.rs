@@ -2,9 +2,8 @@
 //! `9663b25`) that `dex-swaps` uses: the transaction, log and call templates
 //! of `dex.swaps.v1` and [`bigint_to_u64`].
 //!
-//! The Tron Base58 and hex encodings, the ClickHouse helpers and the templates
-//! of the per-protocol and token packages were not ported: no package of this
-//! repository uses them yet.
+//! The Tron Base58 and hex encodings and the ClickHouse column helpers live in
+//! `evm-dex`, their only user.
 
 pub mod create;
 
