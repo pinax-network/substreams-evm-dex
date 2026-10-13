@@ -1,0 +1,37 @@
+specVersion: v0.1.0
+package:
+  name: dex_pools
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    DEX pool metadata (tokens[] plus optional factory) from pool creations, in a
+    set_if_not_exists store keyed by pool address. Ported from substreams-evm
+    dex-swaps-pools v0.8.0.
+protobuf:
+  files: [foundational-store.proto]
+  importPaths: [../../proto/v1/dex]
+  excludePaths: [sf/substreams, google]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/dex_pools.wasm
+modules:
+  # key   = hex-encoded pool address (lowercase, no `0x`)
+  # value = dex.foundational_store.v1.Pool { tokens[], factory }
+  # policy = set_if_not_exists (the first writer wins)
+  - name: store_pools
+    kind: store
+    updatePolicy: set_if_not_exists
+    valueType: proto:dex.foundational_store.v1.Pool
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+
+  # The pools first seen in each block (the store's Create deltas).
+  - name: map_pools
+    kind: map
+    inputs:
+      - store: store_pools
+        mode: deltas
+    output:
+      type: proto:dex.foundational_store.v1.Pools
+network: mainnet

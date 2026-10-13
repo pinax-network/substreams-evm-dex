@@ -18,9 +18,19 @@ pub mod uniswap {
     }
 }
 pub mod dex {
+    pub mod foundational_store {
+        pub mod v1 {
+            include_buffa!("dex.foundational_store.v1");
+        }
+    }
     pub mod pool_state {
         pub mod v1 {
             include_buffa!("dex.pool_state.v1");
+        }
+    }
+    pub mod swaps {
+        pub mod v1 {
+            include_buffa!("dex.swaps.v1");
         }
     }
 }

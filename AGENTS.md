@@ -12,7 +12,7 @@ and taking over the DEX code of `pinax-network/substreams-evm`.
 - For the Token API today, an `evm-dex` `db_out` writes the ClickHouse
   tables the Token API reads, with the SQL embedded in its manifest's `sink:`
   section. The design is substreams-evm's v0.8.0 unified swaps
-  (`dex.swaps.v1`, tag `v0.8.0`, `9663b25`), chosen by the owner on
+  (`dex.swaps.v1`, tag `evm-dex-v0.8.0`, `9663b25`), chosen by the owner on
   2026-10-13. It was never deployed: check parity against the production
   v0.5.0 tables before the Token API switches.
 - Every package exposes plain-Rust decoding (`project(...)`) that a host
@@ -30,9 +30,12 @@ and taking over the DEX code of `pinax-network/substreams-evm`.
   repository's pull requests explicitly. The owner's hold on its live
   Substreams, Firehose and RPC checks stays in force until reauthorized.
 - The swaps, pools and `db_out` code is ported from substreams-evm `main`
-  (`333e8c8`) and tag `v0.8.0` (`9663b25`), from substreams 0.7.6, prost and
-  substreams-abis v1.5.0 to the toolchain below. Record the source commit of
-  every ported file in its package README.
+  (`333e8c8`) and tag `evm-dex-v0.8.0` (`9663b25`), from substreams 0.7.6,
+  prost and substreams-abis v1.5.0 to the toolchain below. Record the source
+  commit of every ported file in its package README. `dex/pools`, `dex/swaps`
+  and the `common` crate keep v0.8.0's output exactly, including behaviour
+  that looks wrong (`dex/swaps/README.md`, "Kept from v0.8.0"); changing it
+  is a separate change the owner approves.
 
 ## Toolchain and validation
 

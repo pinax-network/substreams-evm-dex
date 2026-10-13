@@ -1,0 +1,27 @@
+specVersion: v0.1.0
+package:
+  name: dex_swaps
+  version: v0.9.0
+  url: https://github.com/pinax-network/substreams-evm-dex
+  description: |
+    Swaps, swap fees and pool initializations of EVM DEX protocols, normalized
+    to dex.swaps.v1. Ported from substreams-evm dex-swaps v0.8.0.
+imports:
+  dex_pools: ../pools/substreams.yaml
+protobuf:
+  files: [dex-swaps.proto]
+  importPaths: [../../proto/v1]
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../../target/wasm32-unknown-unknown/release/dex_swaps.wasm
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: dex_pools:store_pools
+        mode: get
+    output:
+      type: proto:dex.swaps.v1.Events
+network: mainnet

@@ -2,7 +2,10 @@
 resolver = "2"
 members = [
   "proto",
+  "common",
   "dex/pool-state",
+  "dex/pools",
+  "dex/swaps",
 ]
 
 [workspace.package]
