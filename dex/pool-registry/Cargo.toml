@@ -1,0 +1,15 @@
+[package]
+name = "dex-pool-registry"
+description = "Bounded first-writer pool metadata with atomic block updates and undo"
+edition = { workspace = true }
+version = "0.9.0"
+license = { workspace = true }
+
+[dependencies]
+dex-pools = { path = "../pools" }
+dex-swaps = { path = "../swaps" }
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }

@@ -62,7 +62,7 @@ fn tx() -> TransactionTrace {
 }
 
 fn decode(log: &Log) -> Vec<pb::log::Log> {
-    decode_log(&tx(), log, &pools()).unwrap()
+    decode_log(&tx(), log, &pools(), &mut SwapDiagnostics::default()).unwrap()
 }
 
 fn swap(protocol: pb::Protocol, factory: &[u8], pool: &[u8], user: &[u8], input: (&[u8], &str), output: (&[u8], &str)) -> pb::log::Log {
@@ -543,7 +543,7 @@ fn curvefi_factory_deployments_take_the_first_call_address() {
     });
     for log in [curve_plain_pool_deployed(uint(4_000_000)), meta] {
         assert_eq!(
-            decode_log(&trx, &log, &pools()).unwrap(),
+            decode_log(&trx, &log, &pools(), &mut SwapDiagnostics::default()).unwrap(),
             vec![
                 init(pb::Protocol::Curvefi, &addr(FACTORY), &addr(ROOT)),
                 fee(pb::Protocol::Curvefi, &addr(FACTORY), &addr(ROOT), 4_000_000)
@@ -554,12 +554,12 @@ fn curvefi_factory_deployments_take_the_first_call_address() {
     // Reverted calls are skipped; without any call the pool is empty.
     trx.calls[0].state_reverted = true;
     assert_eq!(
-        decode_log(&trx, &curve_plain_pool_deployed(uint(1)), &pools()).unwrap()[0],
+        decode_log(&trx, &curve_plain_pool_deployed(uint(1)), &pools(), &mut SwapDiagnostics::default()).unwrap()[0],
         init(pb::Protocol::Curvefi, &addr(FACTORY), &addr(CURVE))
     );
     trx.calls.clear();
     assert_eq!(
-        decode_log(&trx, &curve_plain_pool_deployed(uint(1)), &pools()).unwrap()[0],
+        decode_log(&trx, &curve_plain_pool_deployed(uint(1)), &pools(), &mut SwapDiagnostics::default()).unwrap()[0],
         init(pb::Protocol::Curvefi, &addr(FACTORY), &[])
     );
 }
@@ -572,9 +572,15 @@ fn curvefi_fees_truncate_like_v0_8_0_and_fail_where_it_panicked() {
     let truncated = decode(&curve_plain_pool_deployed(uint(u128::from(u32::MAX) + 2)));
     assert_eq!(truncated[1], fee(pb::Protocol::Curvefi, &addr(FACTORY), &addr(ROOT), 1));
 
-    assert!(decode_log(&tx(), &curve_plain_pool_deployed(uint(u128::from(u64::MAX) + 1)), &pools()).is_err());
+    assert!(decode_log(
+        &tx(),
+        &curve_plain_pool_deployed(uint(u128::from(u64::MAX) + 1)),
+        &pools(),
+        &mut SwapDiagnostics::default()
+    )
+    .is_err());
     let new_fee = log(&addr(CURVE), vec![topic0("NewFee(uint256,uint256)")], concat(&[vec![0xff; 32], uint(0)]));
-    assert!(decode_log(&tx(), &new_fee, &pools()).is_err());
+    assert!(decode_log(&tx(), &new_fee, &pools(), &mut SwapDiagnostics::default()).is_err());
 }
 
 // ── pb::Protocol::Balancer ─────────────────────────────────────────────────────────────────────────────
@@ -846,7 +852,7 @@ fn sunpump_token_creations_and_fee_settings() {
         let set = log(&launchpad, vec![topic0(signature)], concat(&[uint(100), uint(200)]));
         assert_eq!(decode(&set), vec![fee(pb::Protocol::Sunpump, &launchpad, &launchpad, 200)]);
         let overflow = log(&launchpad, vec![topic0(signature)], concat(&[uint(100), vec![0xff; 32]]));
-        assert!(decode_log(&tx(), &overflow, &pools()).is_err());
+        assert!(decode_log(&tx(), &overflow, &pools(), &mut SwapDiagnostics::default()).is_err());
     }
 }
 
@@ -976,4 +982,368 @@ fn project_fails_where_v0_8_0_panicked() {
     // A Curve deployment fee above u64::MAX.
     let overflow = trx(&addr(ROOT), vec![curve_plain_pool_deployed(vec![0xff; 32])]);
     assert!(project(&block(vec![overflow]), &pools()).is_err());
+}
+
+// ── Candidate diagnostics ─────────────────────────────────────────────────────────────────
+
+/// Every pool-dependent ABI branch, including each two-event protocol. The
+/// shared V3/Kyber signature is intentionally interpreted by both decoders.
+fn pool_swap_cases() -> Vec<(Log, Vec<u8>, Vec<pb::Protocol>)> {
+    use pb::Protocol as P;
+    vec![
+        (v1_trade("TokenPurchase(address,uint256,uint256)", V1), addr(V1), vec![P::UniswapV1]),
+        (v1_trade("EthPurchase(address,uint256,uint256)", V1), addr(V1), vec![P::UniswapV1]),
+        (v2_swap(V2, [100, 0, 0, 90]), addr(V2), vec![P::UniswapV2]),
+        (v3_swap(V3, 100, -90), addr(V3), vec![P::UniswapV3, P::KyberElastic]),
+        (v4_swap(&v4_id(), 100, -90), v4_id(), vec![P::UniswapV4]),
+        (
+            log(
+                &addr(AERO),
+                vec![
+                    topic0("Swap(address,address,uint256,uint256,uint256,uint256)"),
+                    word(&addr(SENDER)),
+                    word(&addr(0x70)),
+                ],
+                concat(&[uint(0), uint(100), uint(90), uint(0)]),
+            ),
+            addr(AERO),
+            vec![P::Aerodrome],
+        ),
+        (traderjoe_swap(packed(100, 0), packed(0, 90)), addr(TJ), vec![P::Traderjoe]),
+        (
+            curve_exchange("TokenExchange(address,int128,uint256,int128,uint256)", int(0), int(1)),
+            addr(CURVE),
+            vec![P::Curvefi],
+        ),
+        (
+            curve_exchange("TokenExchange(address,uint256,uint256,uint256,uint256)", uint(0), uint(1)),
+            addr(CURVE),
+            vec![P::Curvefi],
+        ),
+        (balancer_swap(BAL), addr(BAL), vec![P::Balancer]),
+        (
+            log(
+                &addr(BANCOR),
+                vec![
+                    topic0("Conversion(address,address,address,uint256,uint256,int256)"),
+                    word(&addr(T0)),
+                    word(&addr(T1)),
+                    word(&addr(SENDER)),
+                ],
+                concat(&[uint(1000), uint(990), int(-3)]),
+            ),
+            addr(BANCOR),
+            vec![P::Bancor],
+        ),
+        (sunpump_purchase(SUN_TOKEN), addr(SUN_TOKEN), vec![P::Sunpump]),
+        (
+            log(
+                &addr(0x1a),
+                vec![
+                    topic0("TokenSold(address,address,uint256,uint256,uint256)"),
+                    word(&addr(SUN_TOKEN)),
+                    word(&addr(SENDER)),
+                ],
+                concat(&[uint(1000), uint(10), uint(5000)]),
+            ),
+            addr(SUN_TOKEN),
+            vec![P::Sunpump],
+        ),
+    ]
+}
+
+fn stateless_swap_cases() -> Vec<(Log, pb::Protocol)> {
+    vec![
+        (
+            log(
+                &addr(0xc0),
+                vec![topic0("Trade(address,address,address,uint256,uint256,uint256,bytes)"), word(&addr(SENDER))],
+                concat(&[
+                    word(&addr(T0)),
+                    word(&addr(T1)),
+                    uint(1000),
+                    uint(990),
+                    uint(5),
+                    uint(192),
+                    uint(56),
+                    vec![0xab; 64],
+                ]),
+            ),
+            pb::Protocol::Cow,
+        ),
+        (
+            log(
+                &addr(0xd0),
+                vec![topic0("OrderHistory(address,address,address,uint256,uint256)")],
+                concat(&[word(&addr(T0)), word(&addr(T1)), word(&addr(SENDER)), uint(1000), uint(990)]),
+            ),
+            pb::Protocol::Dodo,
+        ),
+        (
+            log(
+                &addr(0xd1),
+                vec![
+                    topic0("WooSwap(address,address,uint256,uint256,address,address,address,uint256,uint256)"),
+                    word(&addr(T0)),
+                    word(&addr(T1)),
+                    word(&addr(0x70)),
+                ],
+                concat(&[uint(1000), uint(990), word(&addr(SENDER)), word(&addr(0)), uint(1), uint(2)]),
+            ),
+            pb::Protocol::Woofi,
+        ),
+    ]
+}
+
+#[test]
+fn diagnostics_count_each_pool_swap_branch_without_changing_events_or_lookup_requests() {
+    for (log, key, protocols) in pool_swap_cases() {
+        let input = block(vec![trx(&addr(ROOT), vec![log])]);
+        let before = Recording::default();
+        let after = Recording::default();
+        let expected = project(&input, &before).unwrap();
+        let (events, diagnostics) = project_with_diagnostics(&input, &after).unwrap();
+        assert_eq!(events.encode_to_vec(), expected.encode_to_vec(), "{protocols:?}");
+        assert_eq!(events.transactions[0].logs.len(), protocols.len(), "{protocols:?}");
+        let mut before_keys = before.0.into_inner();
+        let mut after_keys = after.0.into_inner();
+        before_keys.sort();
+        after_keys.sort();
+        assert_eq!(before_keys, after_keys, "{protocols:?}");
+        for protocol in &protocols {
+            assert_eq!(
+                diagnostics.for_protocol(*protocol),
+                CandidateCounts {
+                    matched_swap_candidates: 1,
+                    ..Default::default()
+                }
+            );
+        }
+        assert_eq!(diagnostics.total().matched_swap_candidates, protocols.len() as u64);
+
+        let mut missing = pools();
+        missing.remove(&key);
+        let (events, diagnostics) = project_with_diagnostics(&input, &missing).unwrap();
+        assert!(events.transactions.is_empty(), "{protocols:?}");
+        for protocol in &protocols {
+            assert_eq!(
+                diagnostics.for_protocol(*protocol),
+                CandidateCounts {
+                    matched_swap_candidates: 1,
+                    missing_pool_metadata: 1,
+                    ..Default::default()
+                }
+            );
+        }
+        assert_eq!(diagnostics.total().missing_pool_metadata, protocols.len() as u64);
+    }
+}
+
+#[test]
+fn diagnostics_stateless_swaps_count_matches_without_pool_gaps() {
+    for (log, protocol) in stateless_swap_cases() {
+        let input = block(vec![trx(&addr(ROOT), vec![log])]);
+        let empty = PoolMetadataMap::new();
+        let (events, diagnostics) = project_with_diagnostics(&input, &empty).unwrap();
+        assert_eq!(events.transactions[0].logs.len(), 1, "{protocol:?}");
+        assert_eq!(events.encode_to_vec(), project(&input, &empty).unwrap().encode_to_vec());
+        assert_eq!(
+            diagnostics.for_protocol(protocol),
+            CandidateCounts {
+                matched_swap_candidates: 1,
+                ..Default::default()
+            }
+        );
+        assert_eq!(diagnostics.total(), diagnostics.for_protocol(protocol));
+    }
+}
+
+#[test]
+fn diagnostics_distinguish_missing_tokens_from_pool_metadata() {
+    for (log, key, protocols) in pool_swap_cases() {
+        let input = block(vec![trx(&addr(ROOT), vec![log])]);
+        let mut lookup = pools();
+        lookup.get_mut(&key).unwrap().tokens.clear();
+        let (events, diagnostics) = project_with_diagnostics(&input, &lookup).unwrap();
+        let needs_tokens = !matches!(protocols[0], pb::Protocol::Balancer | pb::Protocol::Bancor | pb::Protocol::Sunpump);
+        assert_eq!(events.transactions.is_empty(), needs_tokens, "{protocols:?}");
+        for protocol in &protocols {
+            assert_eq!(
+                diagnostics.for_protocol(*protocol),
+                CandidateCounts {
+                    matched_swap_candidates: 1,
+                    missing_token_context: u64::from(needs_tokens),
+                    ..Default::default()
+                },
+                "{protocol:?}"
+            );
+        }
+    }
+
+    // A partial pair fails at the second required position, and an invalid
+    // Curve index is the same missing-context category, counted once.
+    let mut lookup = pools();
+    lookup.get_mut(&addr(V2)).unwrap().tokens.truncate(1);
+    for log in [
+        v2_swap(V2, [100, 0, 0, 90]),
+        curve_exchange("TokenExchange(address,int128,uint256,int128,uint256)", int(-1), int(99)),
+        curve_exchange("TokenExchange(address,int128,uint256,int128,uint256)", int(0), int(99)),
+        curve_exchange("TokenExchange(address,uint256,uint256,uint256,uint256)", uint(0), uint(99)),
+    ] {
+        let (events, diagnostics) = project_with_diagnostics(&block(vec![trx(&addr(ROOT), vec![log])]), &lookup).unwrap();
+        assert!(events.transactions.is_empty());
+        assert_eq!(
+            diagnostics.total(),
+            CandidateCounts {
+                matched_swap_candidates: 1,
+                missing_token_context: 1,
+                ..Default::default()
+            }
+        );
+    }
+}
+
+#[test]
+fn diagnostics_malformed_selected_tokens_are_observations_not_new_filters() {
+    for (log, key, protocols) in pool_swap_cases() {
+        let input = block(vec![trx(&addr(ROOT), vec![log])]);
+        let mut lookup = pools();
+        for token in &mut lookup.get_mut(&key).unwrap().tokens {
+            *token = vec![7; 19];
+        }
+        let (events, diagnostics) = project_with_diagnostics(&input, &lookup).unwrap();
+        assert_eq!(events.transactions[0].logs.len(), protocols.len());
+        assert_eq!(events.encode_to_vec(), project(&input, &lookup).unwrap().encode_to_vec());
+        let uses_tokens = !matches!(protocols[0], pb::Protocol::Balancer | pb::Protocol::Bancor | pb::Protocol::Sunpump);
+        for protocol in &protocols {
+            assert_eq!(
+                diagnostics.for_protocol(*protocol),
+                CandidateCounts {
+                    matched_swap_candidates: 1,
+                    malformed_token_context: u64::from(uses_tokens),
+                    ..Default::default()
+                },
+                "{protocol:?}"
+            );
+        }
+    }
+
+    let input = block(vec![trx(&addr(ROOT), vec![v2_swap(V2, [100, 0, 0, 90])])]);
+    let mut lookup = pools();
+    lookup.get_mut(&addr(V2)).unwrap().tokens = vec![vec![7; 19]];
+    let (_, diagnostics) = project_with_diagnostics(&input, &lookup).unwrap();
+    assert_eq!(
+        diagnostics.total(),
+        CandidateCounts {
+            matched_swap_candidates: 1,
+            missing_token_context: 1,
+            ..Default::default()
+        }
+    );
+    // Repeated native-token addresses and an empty factory are not malformed.
+    lookup.insert(
+        addr(V2),
+        Pool {
+            tokens: vec![addr(0), addr(0)],
+            factory: vec![],
+        },
+    );
+    let (events, diagnostics) = project_with_diagnostics(&input, &lookup).unwrap();
+    assert_eq!(events.transactions[0].logs.len(), 1);
+    assert_eq!(
+        diagnostics.total(),
+        CandidateCounts {
+            matched_swap_candidates: 1,
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn diagnostics_exclude_unrelated_logs_fees_initializations_and_malformed_abi() {
+    let mut malformed_abi = v2_swap(UNKNOWN, [100, 0, 0, 90]);
+    malformed_abi.data.truncate(31);
+    let input = block(vec![trx(
+        &addr(ROOT),
+        vec![
+            log(
+                &addr(UNKNOWN),
+                vec![topic0("Transfer(address,address,uint256)"), word(&addr(T0)), word(&addr(T1))],
+                uint(100),
+            ),
+            log(&addr(UNKNOWN), vec![topic0("SwapFeePercentageChanged(uint256)")], uint(100)),
+            v4_initialize(&v4_id()),
+            malformed_abi,
+        ],
+    )]);
+    let (events, diagnostics) = project_with_diagnostics(&input, &PoolMetadataMap::new()).unwrap();
+    assert_eq!(events.transactions[0].logs.len(), 2, "V4 initialize and fee remain emitted");
+    assert_eq!(diagnostics, SwapDiagnostics::default());
+    assert_eq!(diagnostics.for_protocol(pb::Protocol::Unspecified), CandidateCounts::default());
+}
+
+#[test]
+fn diagnostics_count_abi_candidates_before_direction_validation() {
+    let input = block(vec![trx(&addr(ROOT), vec![v2_swap(V2, [0, 0, 0, 0])])]);
+    let (events, diagnostics) = project_with_diagnostics(&input, &pools()).unwrap();
+    assert!(events.transactions.is_empty());
+    assert_eq!(
+        diagnostics.total(),
+        CandidateCounts {
+            matched_swap_candidates: 1,
+            ..Default::default()
+        }
+    );
+    let (_, diagnostics) = project_with_diagnostics(&input, &PoolMetadataMap::new()).unwrap();
+    assert_eq!(
+        diagnostics.total(),
+        CandidateCounts {
+            matched_swap_candidates: 1,
+            missing_pool_metadata: 1,
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn diagnostics_preserve_receipt_preloading_call_selection_and_block_errors() {
+    let mut trace = trx(&addr(ROOT), vec![v2_swap(V2, [100, 0, 0, 90])]);
+    trace.receipt.as_option_mut().unwrap().logs.clear();
+    let lookup = Recording::default();
+    let (events, diagnostics) = project_with_diagnostics(&block(vec![trace]), &lookup).unwrap();
+    assert!(events.transactions.is_empty());
+    assert!(lookup.0.borrow().is_empty(), "no additional lookup for a call-only candidate");
+    assert_eq!(
+        diagnostics.total(),
+        CandidateCounts {
+            matched_swap_candidates: 1,
+            missing_pool_metadata: 1,
+            ..Default::default()
+        }
+    );
+
+    let mut failed = trx(&addr(ROOT), vec![v2_swap(V2, [100, 0, 0, 90])]);
+    failed.status = TransactionTraceStatus::Failed.into();
+    failed.receipt = buffa::MessageField::none();
+    let mut reverted = trx(&addr(ROOT), vec![v2_swap(V2, [100, 0, 0, 90])]);
+    reverted.calls[0].state_reverted = true;
+    let (events, diagnostics) = project_with_diagnostics(&block(vec![failed, reverted]), &pools()).unwrap();
+    assert!(events.transactions.is_empty());
+    assert_eq!(diagnostics, SwapDiagnostics::default());
+
+    let mut receipt_only = trx(&addr(ROOT), vec![v2_swap(V2, [100, 0, 0, 90])]);
+    receipt_only.calls.clear();
+    let (_, diagnostics) = project_with_diagnostics(&block(vec![receipt_only]), &pools()).unwrap();
+    assert_eq!(diagnostics.total().matched_swap_candidates, 1);
+    let mut no_receipt = trx(&addr(ROOT), vec![]);
+    no_receipt.receipt = buffa::MessageField::none();
+    assert!(project_with_diagnostics(&block(vec![no_receipt]), &pools()).is_err());
+    let overflow = block(vec![trx(
+        &addr(ROOT),
+        vec![v2_swap(V2, [100, 0, 0, 90]), curve_plain_pool_deployed(vec![0xff; 32])],
+    )]);
+    assert!(
+        project_with_diagnostics(&overflow, &pools()).is_err(),
+        "error returns no partial events or counters"
+    );
 }

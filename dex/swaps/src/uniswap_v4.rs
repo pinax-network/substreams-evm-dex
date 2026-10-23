@@ -6,19 +6,23 @@ use substreams_ethereum::{
     Event,
 };
 
+use crate::diagnostics::{swap_pool, CandidateCounts};
 use crate::logs::PoolMetadataMap;
 
-pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap) -> Vec<pb::log::Log> {
+pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap, counts: &mut CandidateCounts) -> Vec<pb::log::Log> {
     if let Some(event) = abi::poolmanager::events::Swap::match_and_decode(log) {
-        let Some(pool) = pools.get(event.id.as_slice()) else {
+        let Some(pool) = swap_pool(pools, event.id.as_slice(), counts) else {
             return Vec::new();
         };
         let Some(token0) = pool.tokens.first() else {
+            counts.missing_token();
             return Vec::new();
         };
         let Some(token1) = pool.tokens.get(1) else {
+            counts.missing_token();
             return Vec::new();
         };
+        counts.observe_tokens(&[token0.as_slice(), token1.as_slice()]);
 
         let amount0 = event.amount0.to_string();
         let amount1 = event.amount1.to_string();

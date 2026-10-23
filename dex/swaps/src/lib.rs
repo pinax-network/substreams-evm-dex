@@ -16,6 +16,7 @@ mod balancer;
 mod bancor;
 mod cow;
 mod curvefi;
+mod diagnostics;
 mod dodo;
 mod kyber_elastic;
 mod logs;
@@ -32,6 +33,7 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use common::create::{CreateLog, CreateTransaction};
+pub use diagnostics::{CandidateCounts, SwapDiagnostics};
 use logs::PoolMetadataMap;
 /// The pool metadata `dex-pools` stores, and [`PoolLookup`] returns.
 pub use proto::pb::dex::foundational_store::v1::Pool;
@@ -69,6 +71,16 @@ impl<S: BuildHasher> PoolLookup for HashMap<Vec<u8>, Pool, S> {
 /// `CommitNewFee`, `NewFee`, `PlainPoolDeployed` or `MetaPoolDeployed`, or a
 /// SunPump `PurchaseFeeSet` or `SaleFeeSet` log.
 pub fn project<P: PoolLookup + ?Sized>(block: &Block, pools: &P) -> Result<pb::Events, Error> {
+    project_with_diagnostics(block, pools).map(|(events, _)| events)
+}
+
+/// Projects the same events as [`project`], with bounded observations from the
+/// existing ABI decoder branches. No extra decoding or pool lookups are run.
+///
+/// Counts describe matched candidates and metadata context, not authenticated
+/// pools or complete protocol coverage. Fees and initializations are excluded;
+/// a block error returns no partial events or diagnostics. See [`CandidateCounts`].
+pub fn project_with_diagnostics<P: PoolLookup + ?Sized>(block: &Block, pools: &P) -> Result<(pb::Events, SwapDiagnostics), Error> {
     // v0.8.0 read every successful transaction's receipt, panicking when one
     // was missing; fail before decoding instead.
     if block.transactions().any(|tx| tx.receipt.is_unset()) {
@@ -76,13 +88,14 @@ pub fn project<P: PoolLookup + ?Sized>(block: &Block, pools: &P) -> Result<pb::E
     }
     let pools = logs::get_pools_by_address(pools, &logs::collect_log_addresses(block));
     let mut transactions = Vec::new();
+    let mut diagnostics = SwapDiagnostics::default();
     for tx in block.transactions() {
-        transactions.extend(process_transaction(tx, &pools)?);
+        transactions.extend(process_transaction(tx, &pools, &mut diagnostics)?);
     }
-    Ok(pb::Events { transactions })
+    Ok((pb::Events { transactions }, diagnostics))
 }
 
-fn process_transaction(tx: &TransactionTrace, pools: &PoolMetadataMap) -> Result<Option<pb::Transaction>, Error> {
+fn process_transaction(tx: &TransactionTrace, pools: &PoolMetadataMap, diagnostics: &mut SwapDiagnostics) -> Result<Option<pb::Transaction>, Error> {
     let mut transaction = pb::Transaction::create_transaction(tx);
     let logs_with_calls: Vec<(&Log, Option<&Call>)> = if tx.calls.is_empty() {
         tx.receipt().logs().map(|log_view| (log_view.log, None)).collect()
@@ -91,7 +104,7 @@ fn process_transaction(tx: &TransactionTrace, pools: &PoolMetadataMap) -> Result
     };
 
     for (log, call) in logs_with_calls {
-        for event in decode_log(tx, log, pools)? {
+        for event in decode_log(tx, log, pools, diagnostics)? {
             transaction.logs.push(pb::Log::create_log_with_call(log, event, call));
         }
     }
@@ -105,23 +118,28 @@ fn process_transaction(tx: &TransactionTrace, pools: &PoolMetadataMap) -> Result
 
 /// Every protocol decoder runs on every log, so a log whose signature two
 /// protocols share yields an event for each (see the README).
-fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap) -> Result<Vec<pb::log::Log>, Error> {
+fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap, diagnostics: &mut SwapDiagnostics) -> Result<Vec<pb::log::Log>, Error> {
     let mut events = Vec::new();
 
-    events.extend(uniswap_v1::decode_log(tx, log, pools));
-    events.extend(uniswap_v2::decode_log(tx, log, pools));
-    events.extend(uniswap_v3::decode_log(tx, log, pools));
-    events.extend(uniswap_v4::decode_log(tx, log, pools));
-    events.extend(curvefi::decode_log(tx, log, pools)?);
-    events.extend(balancer::decode_log(tx, log, pools));
-    events.extend(bancor::decode_log(tx, log, pools)?);
-    events.extend(cow::decode_log(tx, log));
-    events.extend(aerodrome::decode_log(tx, log, pools));
-    events.extend(dodo::decode_log(tx, log));
-    events.extend(woofi::decode_log(tx, log));
-    events.extend(traderjoe::decode_log(tx, log, pools));
-    events.extend(kyber_elastic::decode_log(tx, log, pools));
-    events.extend(sunpump::decode_log(tx, log, pools)?);
+    events.extend(uniswap_v1::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::UniswapV1)));
+    events.extend(uniswap_v2::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::UniswapV2)));
+    events.extend(uniswap_v3::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::UniswapV3)));
+    events.extend(uniswap_v4::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::UniswapV4)));
+    events.extend(curvefi::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::Curvefi))?);
+    events.extend(balancer::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::Balancer)));
+    events.extend(bancor::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::Bancor))?);
+    events.extend(cow::decode_log(tx, log, diagnostics.for_protocol_mut(pb::Protocol::Cow)));
+    events.extend(aerodrome::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::Aerodrome)));
+    events.extend(dodo::decode_log(tx, log, diagnostics.for_protocol_mut(pb::Protocol::Dodo)));
+    events.extend(woofi::decode_log(tx, log, diagnostics.for_protocol_mut(pb::Protocol::Woofi)));
+    events.extend(traderjoe::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::Traderjoe)));
+    events.extend(kyber_elastic::decode_log(
+        tx,
+        log,
+        pools,
+        diagnostics.for_protocol_mut(pb::Protocol::KyberElastic),
+    ));
+    events.extend(sunpump::decode_log(tx, log, pools, diagnostics.for_protocol_mut(pb::Protocol::Sunpump))?);
 
     Ok(events)
 }
