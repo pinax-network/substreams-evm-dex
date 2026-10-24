@@ -28,6 +28,13 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Offline regression tests
         run: cargo test --locked --workspace --lib --bins --tests
+      - name: Keep the historical interpreter out of extraction dependencies
+        run: |
+          cargo tree --locked -p dex-swaps --edges normal,build > "$RUNNER_TEMP/dex-runtime-dependencies.txt"
+          if grep -Eq '(^|[[:space:]])wasmi([_-][[:alnum:]_-]+)? v' "$RUNNER_TEMP/dex-runtime-dependencies.txt"; then
+            cat "$RUNNER_TEMP/dex-runtime-dependencies.txt"
+            exit 1
+          fi
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       # Host builds never compile the `#[cfg(target_arch = "wasm32")]` handlers.

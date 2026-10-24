@@ -1347,3 +1347,6 @@ fn diagnostics_preserve_receipt_preloading_call_selection_and_block_errors() {
         "error returns no partial events or counters"
     );
 }
+
+#[path = "legacy_v080_tests.rs"]
+mod legacy_v080;

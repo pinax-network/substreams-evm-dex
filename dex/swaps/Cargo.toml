@@ -18,3 +18,10 @@ proto = { path = "../../proto" }
 [dev-dependencies]
 buffa = { workspace = true }
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+
+sha2 = "0.10"
+serde_json = "1"
+wasmi = { version = "=0.46.0", default-features = false, features = ["std"] }
+evm-dex = { path = "../../evm-dex" }
+dex-pools = { path = "../pools" }
+substreams-database-change = "=5.0.0"

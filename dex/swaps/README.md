@@ -165,3 +165,16 @@ make -C dex/swaps pack    # out/dex-swaps-v0.9.0.spkg
 ```
 
 Committed spkgs come from CI's Linux build, never a local pack.
+
+
+## Immutable released-WASM comparison
+
+The [v0.8.0 oracle corpus](tests/fixtures/legacy-v0.8.0/README.md)
+executes the actual released pool store, swap map and database formatter. Its 73
+synthetic cases cover every supported swap protocol, metadata boundaries,
+first-writer behavior and both address encodings. Seventy-one cases agree in
+state/events/row fields and order; two reject in both implementations (old WASM
+panic, native error). It retains every known v0.8.0 behavior. The frozen corpus
+and binary hashes are checked offline with `cargo test --locked -p dex-swaps
+released_v080`; Wasmi is a dev dependency only. This does not establish live
+or captured-block coverage or parity with the Token API's older v0.5.0 sinks.
