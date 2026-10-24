@@ -22,6 +22,7 @@
 mod columns;
 mod encoding;
 
+use buffa::Message;
 use columns::{set_call, set_log, set_transaction, BlockColumns};
 pub use encoding::Encoding;
 /// The `dex.swaps.v1` messages [`changes`] takes.
@@ -40,13 +41,59 @@ use substreams_database_change::{
 /// A clock without a timestamp, when `events` holds an event (v0.8.0
 /// panicked).
 pub fn changes(clock: &Clock, events: &pb::Events, encoding: Encoding) -> Result<DatabaseChanges, Error> {
+    changes_with_limit(clock, events, encoding, None)
+}
+
+/// Format native rows within explicit input, log-count and output bounds.
+///
+/// Each row is checked before it joins the retained batch, so transaction and
+/// clock fields cannot multiply across the full batch before rejection. At most
+/// one candidate row is materialized outside the output budget; its fields are
+/// bounded by the encoded input cap. No partial result is returned on failure.
+/// Row contents, keys, operations and ordinals are identical to [`changes`].
+///
+/// # Errors
+///
+/// Invalid limits (1..=100,000 logs and 1..=64 MiB), oversized input or output,
+/// too many logs (including entries without an event), or an invalid clock for
+/// a block that writes rows.
+pub fn changes_bounded(clock: &Clock, events: &pb::Events, encoding: Encoding, max_logs: usize, max_bytes: usize) -> Result<DatabaseChanges, Error> {
+    if !(1..=100_000).contains(&max_logs) || !(1..=64 * 1024 * 1024).contains(&max_bytes) {
+        return Err(Error::msg("invalid row formatting bounds"));
+    }
+    let count = events.transactions.iter().try_fold(0usize, |sum, tx| sum.checked_add(tx.logs.len()));
+    if count.is_none_or(|count| count > max_logs) {
+        return Err(Error::msg("row formatting log capacity exceeded"));
+    }
+    if (events.try_encoded_len()? as usize).saturating_add(clock.try_encoded_len()? as usize) > max_bytes {
+        return Err(Error::msg("row formatting input capacity exceeded"));
+    }
+    changes_with_limit(clock, events, encoding, Some(max_bytes))
+}
+
+fn changes_with_limit(clock: &Clock, events: &pb::Events, encoding: Encoding, max_bytes: Option<usize>) -> Result<DatabaseChanges, Error> {
     // v0.8.0 reads the clock's timestamp only to write a row.
     let has_events = events.transactions.iter().flat_map(|tx| &tx.logs).any(|log| log.log.is_some());
     if !has_events {
         return Ok(DatabaseChanges::default());
     }
     let block = BlockColumns::new(clock)?;
-    let mut tables = Tables::new();
+    let mut changes = DatabaseChanges::default();
+    let mut encoded_bytes = 0usize;
+    let mut append = |tables: Tables| -> Result<(), Error> {
+        let mut candidate = tables.to_database_changes();
+        debug_assert_eq!(candidate.table_changes.len(), 1);
+        candidate.table_changes[0].ordinal = changes.table_changes.len() as u64;
+        // Include the repeated-message tag/length and the actual global ordinal.
+        encoded_bytes = encoded_bytes
+            .checked_add(candidate.try_encoded_len()? as usize)
+            .ok_or_else(|| Error::msg("row formatting output capacity exceeded"))?;
+        if max_bytes.is_some_and(|limit| encoded_bytes > limit) {
+            return Err(Error::msg("row formatting output capacity exceeded"));
+        }
+        changes.table_changes.append(&mut candidate.table_changes);
+        Ok(())
+    };
 
     for (tx_index, tx) in events.transactions.iter().enumerate() {
         for (log_index, log) in tx.logs.iter().enumerate() {
@@ -56,19 +103,22 @@ pub fn changes(clock: &Clock, events: &pb::Events, encoding: Encoding) -> Result
                 pb::log::Log::SwapFee(_) => "swap_fee",
                 pb::log::Log::Initialize(_) => "initialize",
             };
+            let mut tables = Tables::new();
             let row = tables.create_row(table, block.log_key(tx_index, log_index));
             block.set(row);
             set_transaction(encoding, tx, tx_index, row);
             set_log(encoding, log, log_index, row);
             set_call(encoding, log.call.as_option(), row);
             set_event(encoding, event, row);
+            append(tables)?;
         }
     }
 
     // ONLY include blocks if events are present (as v0.8.0).
+    let mut tables = Tables::new();
     block.set(tables.create_row("blocks", [("block_num", block.block_num.clone())]));
+    append(tables)?;
 
-    let mut changes = tables.to_database_changes();
     // The crate emits a row's fields in `HashMap` order, which changes with
     // every WASM build; the sink reads them by name. Sorting keeps the output
     // bytes stable across builds. Composite keys stay in map order.

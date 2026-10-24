@@ -1,8 +1,9 @@
 //! `db_out` through the crate's public API: v0.8.0's rows for every table,
 //! both address encodings, the errors that replace v0.8.0's panics, the
 //! manifest wiring and the embedded v0.8.0 schema.
+use buffa::Message;
 use buffa_types::google::protobuf::Timestamp;
-use evm_dex::{changes, pb, Encoding};
+use evm_dex::{changes, changes_bounded, pb, Encoding};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use substreams::{pb::substreams::Clock, Hex};
@@ -141,6 +142,41 @@ fn events() -> pb::Events {
             },
         ],
     }
+}
+
+#[test]
+fn bounded_rows_match_exactly_across_ordinal_width_and_output_limit() {
+    let mut input = events();
+    input.transactions[0].logs = vec![log(Some(swap()), Some(call())); 130];
+    for encoding in [Encoding::Hex, Encoding::TronBase58] {
+        let expected = changes(&clock(), &input, encoding).unwrap();
+        let bytes = expected.try_encoded_len().unwrap() as usize;
+        let actual = changes_bounded(&clock(), &input, encoding, 131, bytes).unwrap();
+        assert_eq!(actual, expected);
+        assert!(changes_bounded(&clock(), &input, encoding, 131, bytes - 1).is_err());
+        assert!(changes_bounded(&clock(), &input, encoding, 130, bytes).is_err());
+    }
+    for (logs, bytes) in [(0, 1024), (100_001, 1024), (1, 0), (1, 64 * 1024 * 1024 + 1)] {
+        assert!(changes_bounded(&clock(), &pb::Events::default(), Encoding::Hex, logs, bytes).is_err());
+    }
+    assert!(changes_bounded(&Clock::default(), &pb::Events::default(), Encoding::Hex, 1, 1)
+        .unwrap()
+        .table_changes
+        .is_empty());
+}
+
+#[test]
+fn repeated_transaction_fields_reject_before_materializing_the_batch() {
+    let mut input = events();
+    input.transactions.truncate(1);
+    input.transactions[0].gas_price = "1".repeat(256 * 1024);
+    input.transactions[0].logs = vec![log(Some(swap()), None); 8192];
+    // Structurally valid Events under the input cap, but retaining every row
+    // would duplicate more than 2 GiB of this single transaction field.
+    let bytes = input.try_encoded_len().unwrap() as usize + clock().try_encoded_len().unwrap() as usize;
+    assert!(bytes < 16 * 1024 * 1024);
+    let error = changes_bounded(&clock(), &input, Encoding::Hex, 8192, bytes).unwrap_err();
+    assert!(error.to_string().contains("output capacity exceeded"));
 }
 
 /// A change as the sink reads it: fields by column name, never by position.
