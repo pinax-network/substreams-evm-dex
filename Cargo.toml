@@ -5,6 +5,7 @@ members = [
   "common",
   "dex/pool-state",
   "dex/pools",
+  "dex/pool-registry",
   "dex/swaps",
   "evm-dex",
   # Per-protocol raw events, and the foundational store built on them.

@@ -7,13 +7,14 @@ use substreams_ethereum::{
     Event,
 };
 
+use crate::diagnostics::{swap_pool, CandidateCounts};
 use crate::logs::PoolMetadataMap;
 use crate::utils::truncated_fee;
 use substreams::errors::Error;
 
-pub(crate) fn decode_log(_tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap) -> Result<Vec<pb::log::Log>, Error> {
+pub(crate) fn decode_log(_tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap, counts: &mut CandidateCounts) -> Result<Vec<pb::log::Log>, Error> {
     if let Some(event) = abi::events::Conversion::match_and_decode(log) {
-        let Some(pool) = pools.get(log.address.as_slice()) else {
+        let Some(pool) = swap_pool(pools, log.address.as_slice(), counts) else {
             return Ok(Vec::new());
         };
 

@@ -1,3 +1,4 @@
+use crate::diagnostics::CandidateCounts;
 use proto::pb::dex::swaps::v1 as pb;
 use substreams_abis::dex::woofi as abi;
 use substreams_ethereum::{
@@ -5,10 +6,12 @@ use substreams_ethereum::{
     Event,
 };
 
-pub(crate) fn decode_log(_tx: &TransactionTrace, log: &Log) -> Vec<pb::log::Log> {
+pub(crate) fn decode_log(_tx: &TransactionTrace, log: &Log, counts: &mut CandidateCounts) -> Vec<pb::log::Log> {
     let Some(event) = abi::wooppv2::events::WooSwap::match_and_decode(log) else {
         return Vec::new();
     };
+
+    counts.matched();
 
     vec![pb::log::Log::from(pb::Swap {
         protocol: pb::Protocol::Woofi.into(),

@@ -5,21 +5,26 @@ use substreams_ethereum::{
     Event,
 };
 
+use crate::diagnostics::{swap_pool, CandidateCounts};
 use crate::logs::PoolMetadataMap;
 use crate::utils::truncated_fee;
 use substreams::errors::Error;
 
-pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap) -> Result<Vec<pb::log::Log>, Error> {
+pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap, counts: &mut CandidateCounts) -> Result<Vec<pb::log::Log>, Error> {
     if let Some(event) = abi::pool::events::TokenExchange::match_and_decode(log) {
-        let Some(pool) = pools.get(log.address.as_slice()) else {
+        let Some(pool) = swap_pool(pools, log.address.as_slice(), counts) else {
             return Ok(Vec::new());
         };
         let Some(input_token) = parse_curve_token(&pool.tokens, &event.sold_id.to_string()) else {
+            counts.missing_token();
             return Ok(Vec::new());
         };
         let Some(output_token) = parse_curve_token(&pool.tokens, &event.bought_id.to_string()) else {
+            counts.missing_token();
             return Ok(Vec::new());
         };
+
+        counts.observe_tokens(&[input_token.as_slice(), output_token.as_slice()]);
 
         return Ok(vec![pb::log::Log::from(pb::Swap {
             protocol: pb::Protocol::Curvefi.into(),
@@ -34,15 +39,19 @@ pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataM
     }
 
     if let Some(event) = abi::cryptoswap::events::TokenExchange::match_and_decode(log) {
-        let Some(pool) = pools.get(log.address.as_slice()) else {
+        let Some(pool) = swap_pool(pools, log.address.as_slice(), counts) else {
             return Ok(Vec::new());
         };
         let Some(input_token) = parse_curve_token(&pool.tokens, &event.sold_id.to_string()) else {
+            counts.missing_token();
             return Ok(Vec::new());
         };
         let Some(output_token) = parse_curve_token(&pool.tokens, &event.bought_id.to_string()) else {
+            counts.missing_token();
             return Ok(Vec::new());
         };
+
+        counts.observe_tokens(&[input_token.as_slice(), output_token.as_slice()]);
 
         return Ok(vec![pb::log::Log::from(pb::Swap {
             protocol: pb::Protocol::Curvefi.into(),

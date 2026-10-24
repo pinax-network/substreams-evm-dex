@@ -53,6 +53,38 @@ without a receipt, or a fee above `u64::MAX` in a Curve `CommitNewFee`,
 `NewFee`, `PlainPoolDeployed` or `MetaPoolDeployed`, or a SunPump
 `PurchaseFeeSet` or `SaleFeeSet` log.
 
+### Optional candidate diagnostics
+
+`project_with_diagnostics(&block, &lookup)` returns `(Events, SwapDiagnostics)`
+with the same events, ordering, errors and lookup requests as `project`. It
+counts in the existing ABI decoder branches without repeating ABI decoding or
+changing metadata preloading. `for_protocol(Protocol)` returns a copy of that
+protocol's `CandidateCounts`; `total()` sums the protocol interpretations.
+
+- `matched_swap_candidates`: ABI-matched swap candidates, including stateless
+  CoW, DODO and WOOFi. Fees, initializations and unsupported signatures do not count.
+- `missing_pool_metadata`: a candidate's required pool was absent from the
+  preloaded block map. Generic lookup misses for unrelated log emitters do not count.
+- `missing_token_context`: a known pool lacks a required token position, or a
+  Curve token index is invalid. This is counted once per candidate.
+- `malformed_token_context`: all required token positions exist, but a selected
+  token is not 20 bytes. This is counted once without rejecting the event or
+  changing its legacy output. Zero addresses, repeated tokens and empty
+  factories are not classified as malformed.
+
+These observations are bounded, fixed-size counters without retained addresses
+or logs. They are candidate counts, not confirmed missing swap rows or complete
+protocol coverage: emitters remain unauthenticated, and amount/direction checks
+run after metadata checks. Uniswap V3 and Kyber each count the same shared ABI
+signature, matching their independent decoder interpretations. Balancer, Bancor
+and SunPump need stored metadata but read swap tokens from the event, so an
+empty stored token vector is valid; CoW, DODO and WOOFi need no stored metadata.
+
+A missing preloaded pool does not prove absence from the caller's registry:
+preloading reads successful receipt logs while decoding prefers non-reverted
+call logs. This API preserves that distinction and makes no additional lookup
+when those sources differ. A failed block returns no partial diagnostics.
+
 ## Kept from v0.8.0
 
 The port reproduces v0.8.0's output exactly, including behaviour that looks
@@ -96,7 +128,8 @@ Every source file comes from substreams-evm `9663b25` (tag `evm-dex-v0.8.0`):
 | `src/utils.rs` | `dex-swaps/src/utils.rs` | adds `truncated_fee`, v0.8.0's `to_u64() as u32` without the panic |
 | `src/{curvefi,sunpump,bancor}.rs` | same names | return `Result`; fees through `truncated_fee` |
 | `src/{uniswap_v3,uniswap_v4,kyber_elastic}.rs` | same names | direction helpers take `&[u8]` |
-| all protocol modules | same names | buffa: `Protocol` as `EnumValue`, boxed oneof variants via `Log::from` |
+| `src/diagnostics.rs` | new | bounded candidate counters from existing decode branches; events and lookups unchanged |
+| all protocol modules | same names | optional candidate observations; buffa: `Protocol` as `EnumValue`, boxed oneof variants via `Log::from` |
 | `substreams.yaml` | `dex-swaps/substreams.yaml` | version v0.9.0, imports `../pools/substreams.yaml` as `dex_pools` instead of the v0.8.0 spkg; same module |
 | `../../common/src/create.rs` | `common/src/create.rs` | the `dex.swaps.v1` templates, from one macro shared with the per-protocol packages; values unchanged |
 | `../../common/src/lib.rs` | `common/src/lib.rs` | `bigint_to_u64` (the per-protocol packages add `bigint_to_i32` and `try_to_u64`) |
@@ -112,7 +145,10 @@ versions, and the decoders are only reached through `match_and_decode`.
 
 `cargo test -p dex-swaps` covers every decoder above with synthetic logs whose
 topic 0 is the Keccak-256 of the canonical event signature, plus `project`'s
-lookups, metadata, receipt fallback, reverted calls and failures. A
+lookups, metadata, receipt fallback, reverted calls and failures. Candidate
+diagnostics tests cover every swap branch, missing metadata and token context,
+malformed token widths, shared V3/Kyber signatures, stateless swaps and unchanged
+lookup requests and event bytes. A
 differential run on 2026-10-13 fed 120,000 random synthetic blocks to this
 crate and to v0.8.0's decoders (prost, substreams 0.7.6, substreams-abis
 v1.5.0): byte-identical `map_events` output, and the same blocks failing (see

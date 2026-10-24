@@ -19,6 +19,7 @@ Sibling repositories:
 | Package | Modules | Output |
 | --- | --- | --- |
 | [`dex/pools`](dex/pools/README.md) (`dex_pools` v0.9.0) | `store_pools`, `map_pools` | `dex.foundational_store.v1`: each pool's tokens and factory, stored first-writer-wins by pool address, and `Pools`, the pools first created in a block |
+| [`dex/pool-registry`](dex/pool-registry/README.md) (`dex_pool_registry` v0.9.0) | Native library only | Bounded first-writer metadata, seed fingerprint/completeness, staged block updates and atomic undo/finality |
 | [`dex/swaps`](dex/swaps/README.md) (`dex_swaps` v0.9.0) | `map_events` (imports `dex_pools`) | `dex.swaps.v1.Events`: `Swap`, `SwapFee` and `Initialize` per transaction, for every supported protocol |
 | [`evm-dex`](evm-dex/README.md) (`evm_dex` v0.9.0) | `db_out` (imports `dex_swaps`) | `DatabaseChanges` into the Token API DEX tables; the ClickHouse SQL is embedded in the package |
 | [`dex/pool-state`](dex/pool-state/README.md) (`dex_pool_state` v0.2.0) | `map_events` | `dex.pool_state.v1.BlockPoolState`: Uniswap V2 reserves and ordered V3 pool changes from Extended blocks |
@@ -54,7 +55,7 @@ writes the same rows. The `db_out` param is the address encoding: `hex`, or
 
 ## Use from Rust
 
-Each crate re-exports the block type it takes (`eth`) and its output types.
+Each extraction crate re-exports the block type it takes (`eth`) and its output types.
 Swaps need pool metadata from earlier blocks, so the host keeps the pools,
 first writer wins, and passes them in:
 
@@ -80,6 +81,13 @@ for block in blocks {                       // decoded dex_swaps::eth::Block
 `project(&block)` (for example `uniswap_v3::project`, the raw events as
 `uniswap.v3.Events`) need no state across blocks; each crate's README names
 its API.
+
+For a bounded registry with atomic updates and reorg handling, use
+[`dex_pool_registry`](dex/pool-registry/README.md). It accepts the existing
+pool projectors' 20-byte addresses and 32-byte IDs, arbitrary bounded token
+vectors and empty factories. Prepare the whole creation batch, project swaps
+through its `PoolLookup`, then commit after downstream validation. Seed
+completeness remains an explicit caller declaration.
 
 ## Build and test
 

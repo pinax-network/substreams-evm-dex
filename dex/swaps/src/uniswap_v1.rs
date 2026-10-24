@@ -5,16 +5,20 @@ use substreams_ethereum::{
     Event, NULL_ADDRESS,
 };
 
+use crate::diagnostics::{swap_pool, CandidateCounts};
 use crate::logs::PoolMetadataMap;
 
-pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap) -> Vec<pb::log::Log> {
+pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataMap, counts: &mut CandidateCounts) -> Vec<pb::log::Log> {
     if let Some(event) = abi::exchange::events::TokenPurchase::match_and_decode(log) {
-        let Some(pool) = pools.get(log.address.as_slice()) else {
+        let Some(pool) = swap_pool(pools, log.address.as_slice(), counts) else {
             return Vec::new();
         };
         let Some(token) = pool.tokens.first() else {
+            counts.missing_token();
             return Vec::new();
         };
+
+        counts.observe_tokens(&[token.as_slice()]);
 
         return vec![pb::log::Log::from(pb::Swap {
             protocol: pb::Protocol::UniswapV1.into(),
@@ -29,12 +33,15 @@ pub(crate) fn decode_log(tx: &TransactionTrace, log: &Log, pools: &PoolMetadataM
     }
 
     if let Some(event) = abi::exchange::events::EthPurchase::match_and_decode(log) {
-        let Some(pool) = pools.get(log.address.as_slice()) else {
+        let Some(pool) = swap_pool(pools, log.address.as_slice(), counts) else {
             return Vec::new();
         };
         let Some(token) = pool.tokens.first() else {
+            counts.missing_token();
             return Vec::new();
         };
+
+        counts.observe_tokens(&[token.as_slice()]);
 
         return vec![pb::log::Log::from(pb::Swap {
             protocol: pb::Protocol::UniswapV1.into(),
