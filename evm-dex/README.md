@@ -96,11 +96,19 @@ candidate row is checked before it joins the retained batch, so repeated
 transaction or clock fields cannot expand across the whole block before
 rejection. At most one candidate row sits outside the output budget; hex
 expansion and the block hash, repeated in its key and fields, can make it up to
-about twice the encoded input. `max_bytes` bounds encoded bytes, not memory:
-retained rows hold about three times their encoded size, so plan for about 3x
-`max_bytes` resident per in-flight block, plus that one candidate. Invalid
-limits or overflow return an error without partial output. Row contents, keys,
-operations and ordinals match `changes`.
+about twice the encoded input. `max_bytes` bounds encoded bytes, not memory.
+Counted in requested heap bytes, retained rows hold about 4x their encoded
+size: 3.8x for minimal swap rows, up to 4.8x when the logs carry no address,
+topics or amounts. The candidate takes about 4x its log data, whose hex is
+built twice. A rejected block whose rows fill the budget just before a
+candidate carrying most of the input peaks at about 7.5x `max_bytes` with
+minimal swap rows and up to about 9x with such empty logs
+([`tests/bounded_memory.rs`](tests/bounded_memory.rs) asserts 9x). Plan for
+about 9x `max_bytes` per in-flight block (about 580 MiB at `MAX_BYTES_BOUND`),
+plus the allocator's overhead on the many short strings: a glibc chunk model
+of the same runs gives about 10.5x. Invalid limits or overflow return an error
+without partial output. Row contents, keys, operations and ordinals match
+`changes`.
 
 ## Kept from v0.8.0
 

@@ -88,11 +88,61 @@ fn log(data: Vec<u8>) -> pb::Log {
     }
 }
 
+/// A swap with no address, topics or amounts: about the smallest input that
+/// writes a row, whose short fields cost more memory per encoded byte.
+fn empty_log(data: Vec<u8>) -> pb::Log {
+    pb::Log {
+        data,
+        log: Some(pb::log::Log::from(pb::Swap::default())),
+        ..Default::default()
+    }
+}
+
+/// The tightest `max_bytes` the input check accepts for `events`.
+fn tightest(events: &pb::Events) -> usize {
+    events.try_encoded_len().unwrap() as usize + clock().try_encoded_len().unwrap() as usize
+}
+
+/// As many rows of `small` as fit within the tightest `max_bytes`, then one
+/// row whose 1 MiB of log data is most of the input: the retained rows fill
+/// the budget before that row is built.
+fn filled(small: fn(Vec<u8>) -> pb::Log) -> pb::Events {
+    let events = |rows: usize, candidate: bool| {
+        let mut logs = vec![small(vec![]); rows];
+        if candidate {
+            logs.push(small(vec![0x5a; 1024 * 1024]));
+        }
+        pb::Events {
+            transactions: vec![pb::Transaction {
+                hash: vec![0x11; 32],
+                logs,
+                ..Default::default()
+            }],
+        }
+    };
+    // The rows, with the `blocks` row, fit in the budget of the whole block.
+    let fits = |rows: usize| changes_bounded(&clock(), &events(rows, false), Encoding::Hex, rows.max(1), tightest(&events(rows, true))).is_ok();
+    let mut rows = 1;
+    while fits(2 * rows) {
+        rows *= 2;
+    }
+    let (mut low, mut high) = (rows, 2 * rows);
+    while high - low > 1 {
+        let middle = (low + high) / 2;
+        if fits(middle) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    events(low, true)
+}
+
 /// The peak extra heap bytes of `changes_bounded` for `events` at the tightest
 /// `max_bytes` its input check accepts, and that `max_bytes`.
 fn peak_of_rejected(events: &pb::Events) -> (usize, usize) {
     let clock = clock();
-    let max_bytes = events.try_encoded_len().unwrap() as usize + clock.try_encoded_len().unwrap() as usize;
+    let max_bytes = tightest(events);
     let logs = events.transactions.iter().map(|tx| tx.logs.len()).sum();
     let before = LIVE.load(Ordering::SeqCst);
     PEAK.store(before, Ordering::SeqCst);
@@ -128,10 +178,19 @@ fn rejected_batches_peak_within_a_small_multiple_of_max_bytes() {
     both.push(log(vec![0x5a; 4 * 1024 * 1024]));
     let both = large_field(both);
     // Measured: about 1.1x, 4.0x (the hex string is built twice while its row
-    // is set) and 5.0x. Checking the budget only after the loop retains the
-    // whole repeated batch instead, about 450x.
-    for (name, events) in [("repeated", repeated), ("expanded", expanded), ("both", both)] {
+    // is set) and 5.0x; then 7.4x and 8.4x, where minimal or empty rows,
+    // holding 3.8x and 4.4x their encoded size, fill the budget before such a
+    // row. The bound is the README's worst case. Checking the budget only
+    // after the loop retains the whole repeated batch instead, about 450x.
+    let shapes = [
+        ("repeated", repeated),
+        ("expanded", expanded),
+        ("both", both),
+        ("filled", filled(log)),
+        ("filled_empty", filled(empty_log)),
+    ];
+    for (name, events) in shapes {
         let (peak, max_bytes) = peak_of_rejected(&events);
-        assert!(peak <= 6 * max_bytes, "{name}: peak {peak} bytes for max_bytes {max_bytes}");
+        assert!(peak <= 9 * max_bytes, "{name}: peak {peak} bytes for max_bytes {max_bytes}");
     }
 }
