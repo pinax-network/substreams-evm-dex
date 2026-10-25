@@ -809,6 +809,9 @@ fn released_v080_all_protocols_pool_lookup_and_row_parity() {
                 let raw = oracle.rows(&clock.encode_to_vec(), &old.output, name.as_bytes()).unwrap().output;
                 let historical_changes = DatabaseChanges::decode_from_slice(&raw).unwrap();
                 let actual_changes = evm_dex::changes(&clock, native, encoding).unwrap();
+                // The bounded entry point, at the limits pinax-streams #74 uses.
+                let bounded = evm_dex::changes_bounded(&clock, native, encoding, 65_536, evm_dex::MAX_BYTES_BOUND).unwrap();
+                assert_eq!(bounded, actual_changes, "bounded rows {} {name}", case.name);
                 let keys = row_keys(&historical_changes);
                 assert_eq!(keys, row_keys(&actual_changes), "row keys {} {name}", case.name);
                 let historical = rows(historical_changes);

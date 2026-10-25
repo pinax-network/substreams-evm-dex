@@ -87,6 +87,21 @@ param; `pb` re-exports `dex.swaps.v1`. It fails, where v0.8.0 panicked, on a
 clock without a timestamp in a block with events; a block without events
 writes nothing whatever its clock.
 
+Native consumers accepting bounded inputs should use
+`changes_bounded(&Clock, &pb::Events, Encoding, max_logs, max_bytes)`, with
+`max_logs` up to `MAX_LOGS_BOUND` (100,000) and `max_bytes` up to
+`MAX_BYTES_BOUND` (64 MiB). Limits cover all input logs (including entries
+without an event), encoded input plus clock, and exact encoded output. Each
+candidate row is checked before it joins the retained batch, so repeated
+transaction or clock fields cannot expand across the whole block before
+rejection. At most one candidate row sits outside the output budget; hex
+expansion and the block hash, repeated in its key and fields, can make it up to
+about twice the encoded input. `max_bytes` bounds encoded bytes, not memory:
+retained rows hold about three times their encoded size, so plan for about 3x
+`max_bytes` resident per in-flight block, plus that one candidate. Invalid
+limits or overflow return an error without partial output. Row contents, keys,
+operations and ordinals match `changes`.
+
 ## Kept from v0.8.0
 
 The port writes v0.8.0's rows exactly, including behaviour that looks wrong.
