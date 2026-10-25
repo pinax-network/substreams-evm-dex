@@ -205,10 +205,10 @@ Committed spkgs come from CI's Linux build, never a local pack.
 
 The [v0.8.0 oracle corpus](tests/fixtures/legacy-v0.8.0/README.md)
 executes the actual released pool store, swap map and database formatter. Its
-107 synthetic cases cover every supported swap protocol, pool creation by every
+108 synthetic cases cover every supported swap protocol, pool creation by every
 `dex/pools` collector, fee and initialization events, metadata boundaries,
 first-writer behavior, several transactions in a block, a contract-creation
-transaction and both address encodings. Ninety-nine cases agree in pool state,
+transaction and both address encodings. A hundred cases agree in pool state,
 events and rows; two reject in both implementations (old WASM panic, native
 error). The other six are the
 [accepted difference](#accepted-differences-from-v080): the old WASM panics

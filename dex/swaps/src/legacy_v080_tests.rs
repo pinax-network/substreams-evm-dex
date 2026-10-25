@@ -412,7 +412,7 @@ fn fee_and_transaction_cases() -> Vec<Case> {
         log(&addr(BAL), vec![topic0("SwapFeePercentageChanged(uint256)")], uint(3 * 10u128.pow(15))),
         // Above u64::MAX: 0 bps.
         log(&addr(BAL), vec![topic0("SwapFeePercentageChanged(uint256)")], vec![0xff; 32]),
-        // No lookup names the pool: dropped.
+        // BAL's own fee logs above make it a lookup key: 100 bps.
         log(
             &addr(VAULT),
             vec![topic0("AggregateSwapFeePercentageChanged(address,uint256)"), word(&addr(BAL))],
@@ -454,9 +454,12 @@ fn fee_and_transaction_cases() -> Vec<Case> {
         case("fees_of_every_protocol", block(vec![trx(&addr(ROOT), fees)]), pools()),
         case(
             "fee_aggregate_named_by_swap",
-            block(vec![trx(&addr(ROOT), vec![aggregate, balancer_swap(BAL)])]),
+            block(vec![trx(&addr(ROOT), vec![aggregate.clone(), balancer_swap(BAL)])]),
             pools(),
         ),
+        // Only VAULT emits, and nothing else names the seeded BAL: no lookup
+        // finds it, so neither side writes a row (Kept from v0.8.0, item 5).
+        case("fee_aggregate_without_lookup", block(vec![trx(&addr(ROOT), vec![aggregate])]), pools()),
         case(
             "initialize_fee_conversions",
             block(vec![trx(&addr(ROOT), vec![v3_created.clone(), v4_truncated, v4_above_u64])]),
@@ -831,7 +834,9 @@ fn released_v080_all_protocols_pool_lookup_and_row_parity() {
         }
         corpus.push(entry);
     }
-    let expected_outcomes = BTreeMap::from([("agree", 99), ("rejected", 2), ("historical_rejects_native_skips_log", 6)]);
+    let dropped = corpus.iter().find(|case| case["name"] == "fee_aggregate_without_lookup").unwrap();
+    assert_eq!(dropped["oracle_events_hex"], "", "the aggregate fee of a pool no lookup names is dropped");
+    let expected_outcomes = BTreeMap::from([("agree", 100), ("rejected", 2), ("historical_rejects_native_skips_log", 6)]);
     assert_eq!(outcomes, expected_outcomes, "case outcomes; update the fixture README with them");
     let result = json!({"schema_version":2,"package_sha256":"761fe2c6b2d46369781730d53962f0a348fd0df0faf3943f5979e8a2316d11d2",
         "clock_hex":hex(clock.encode_to_vec()),"cases":corpus});
