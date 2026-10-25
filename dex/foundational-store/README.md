@@ -4,8 +4,11 @@ Foundational-store entries for DEX pools: each pool's tokens and factory,
 keyed by the pool. A port of substreams-evm `dex-swaps-pools-foundational-store`
 (crate `evm-dex-foundational-store`, package `evm_dex_foundational_store`) at
 tag `evm-dex-v0.8.0` (`9663b25`) to substreams 0.8.0 and buffa. Its output is
-unchanged, including the v0.8.0 behaviour listed under
-[Kept from v0.8.0](#kept-from-v080). The package keeps v0.8.0's name, so a
+unchanged for every block v0.8.0 accepts, including the v0.8.0 behaviour listed
+under [Kept from v0.8.0](#kept-from-v080); the blocks its inputs failed on
+malformed dynamic ABI data are an
+[accepted difference](../swaps/README.md#accepted-differences-from-v080) (see
+[Port from v0.8.0](#port-from-v080)). The package keeps v0.8.0's name, so a
 foundational store deployed from it is `evm_dex_foundational_store@v0.9.0`.
 
 `map_entries` reads the `map_events` output of eleven per-protocol packages of
@@ -54,8 +57,9 @@ input does, as Substreams does.
 
 ## Kept from v0.8.0
 
-The port reproduces v0.8.0's output exactly, including behaviour that looks
-wrong; changing it is a separate, owner-approved change.
+The port reproduces v0.8.0's output exactly for every block v0.8.0 accepts,
+including behaviour that looks wrong; changing it is a separate, owner-approved
+change.
 
 1. **Kyber Elastic and Uniswap V3 share `PoolCreated`.** Each V3 or Kyber
    pool creation gives two entries with the same key, Kyber's first; the
@@ -85,12 +89,20 @@ v0.8.0 imported the per-protocol packages' committed v0.6.0 spkgs. Those were
 packed at substreams-evm `f767e6c`, where the packages' sources and
 dependencies equal v0.8.0's, so importing the ported packages keeps the inputs.
 
+One difference: on wasm32, where v0.8.0 ran, the `dex/balancer`, `dex/curvefi`,
+`dex/sunpump` and `dex/traderjoe` inputs failed the block on a log whose
+dynamic ABI offset or length wraps 32 bits (see their READMEs), and
+`map_entries` failed with them. The ported inputs skip that log, so
+`map_entries` writes the block's other entries. The owner accepted this
+difference on 2026-10-25 (see [`dex/swaps`](../swaps/README.md#accepted-differences-from-v080)).
+
 ## Validation
 
 `cargo test -p evm-dex-foundational-store` runs 5 tests. The 2026-10-13
 differential run (120,000 random synthetic blocks, see the pull request) also
 compared `map_entries` on the eleven packages' outputs with v0.8.0's (prost,
-substreams 0.7.6): byte-identical, and failing where an input failed. No
+substreams 0.7.6): byte-identical, and failing where an input failed. It ran
+natively on a 64-bit host, where the wasm32 failures above cannot occur. No
 captured-block fixture or live run backs this package yet.
 
 ## Build
