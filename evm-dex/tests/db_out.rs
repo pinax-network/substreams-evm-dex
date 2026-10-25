@@ -3,7 +3,7 @@
 //! manifest wiring and the embedded v0.8.0 schema.
 use buffa::Message;
 use buffa_types::google::protobuf::Timestamp;
-use evm_dex::{changes, changes_bounded, pb, Encoding};
+use evm_dex::{changes, changes_bounded, pb, Encoding, MAX_BYTES_BOUND, MAX_LOGS_BOUND};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use substreams::{pb::substreams::Clock, Hex};
@@ -156,9 +156,11 @@ fn bounded_rows_match_exactly_across_ordinal_width_and_output_limit() {
         assert!(changes_bounded(&clock(), &input, encoding, 131, bytes - 1).is_err());
         assert!(changes_bounded(&clock(), &input, encoding, 130, bytes).is_err());
     }
-    for (logs, bytes) in [(0, 1024), (100_001, 1024), (1, 0), (1, 64 * 1024 * 1024 + 1)] {
+    assert_eq!((MAX_LOGS_BOUND, MAX_BYTES_BOUND), (100_000, 64 * 1024 * 1024));
+    for (logs, bytes) in [(0, 1024), (MAX_LOGS_BOUND + 1, 1024), (1, 0), (1, MAX_BYTES_BOUND + 1)] {
         assert!(changes_bounded(&clock(), &pb::Events::default(), Encoding::Hex, logs, bytes).is_err());
     }
+    assert!(changes_bounded(&clock(), &input, Encoding::Hex, MAX_LOGS_BOUND, MAX_BYTES_BOUND).is_ok());
     assert!(changes_bounded(&Clock::default(), &pb::Events::default(), Encoding::Hex, 1, 1)
         .unwrap()
         .table_changes

@@ -33,13 +33,20 @@ use substreams_database_change::{
     tables::{Row, Tables},
 };
 
+/// The largest `max_logs` that [`changes_bounded`] accepts.
+pub const MAX_LOGS_BOUND: usize = 100_000;
+/// The largest `max_bytes` that [`changes_bounded`] accepts: 64 MiB.
+pub const MAX_BYTES_BOUND: usize = 64 * 1024 * 1024;
+
 /// The `db_out` body: one row per event of `events`, in order, then the
 /// `blocks` row.
 ///
 /// # Errors
 ///
 /// A clock without a timestamp, when `events` holds an event (v0.8.0
-/// panicked).
+/// panicked). Practically unreachable: a row whose encoded size exceeds
+/// buffa's 2 GiB message limit, or a total encoded size that overflows
+/// `usize`.
 pub fn changes(clock: &Clock, events: &pb::Events, encoding: Encoding) -> Result<DatabaseChanges, Error> {
     changes_with_limit(clock, events, encoding, None)
 }
@@ -48,17 +55,25 @@ pub fn changes(clock: &Clock, events: &pb::Events, encoding: Encoding) -> Result
 ///
 /// Each row is checked before it joins the retained batch, so transaction and
 /// clock fields cannot multiply across the full batch before rejection. At most
-/// one candidate row is materialized outside the output budget; its fields are
-/// bounded by the encoded input cap. No partial result is returned on failure.
-/// Row contents, keys, operations and ordinals are identical to [`changes`].
+/// one candidate row is materialized outside the output budget. Hex expansion
+/// and the block hash, repeated in its key and fields, can make that row up to
+/// about twice the encoded input, so memory stays linear in the input. No
+/// partial result is returned on failure. Row contents, keys, operations and
+/// ordinals are identical to [`changes`].
+///
+/// `max_bytes` bounds encoded bytes, not memory: retained rows hold about three
+/// times their encoded size.
 ///
 /// # Errors
 ///
-/// Invalid limits (1..=100,000 logs and 1..=64 MiB), oversized input or output,
-/// too many logs (including entries without an event), or an invalid clock for
-/// a block that writes rows.
+/// - `max_logs` outside `1..=`[`MAX_LOGS_BOUND`] or `max_bytes` outside
+///   `1..=`[`MAX_BYTES_BOUND`];
+/// - more than `max_logs` logs, counting entries without an event;
+/// - an encoded input plus clock above `max_bytes`;
+/// - an encoded output above `max_bytes`, checked row by row;
+/// - and the errors of [`changes`] for a block that writes rows.
 pub fn changes_bounded(clock: &Clock, events: &pb::Events, encoding: Encoding, max_logs: usize, max_bytes: usize) -> Result<DatabaseChanges, Error> {
-    if !(1..=100_000).contains(&max_logs) || !(1..=64 * 1024 * 1024).contains(&max_bytes) {
+    if !(1..=MAX_LOGS_BOUND).contains(&max_logs) || !(1..=MAX_BYTES_BOUND).contains(&max_bytes) {
         return Err(Error::msg("invalid row formatting bounds"));
     }
     let count = events.transactions.iter().try_fold(0usize, |sum, tx| sum.checked_add(tx.logs.len()));
