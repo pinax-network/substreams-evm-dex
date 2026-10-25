@@ -106,7 +106,11 @@ minimal swap rows and up to about 9x with such empty logs
 ([`tests/bounded_memory.rs`](tests/bounded_memory.rs) asserts 9x). Plan for
 about 9x `max_bytes` per in-flight block (about 580 MiB at `MAX_BYTES_BOUND`),
 plus the allocator's overhead on the many short strings: a glibc chunk model
-of the same runs gives about 10.5x. Invalid limits or overflow return an error
+of the same runs gives about 10.5x. These multiples hold for logs of at most
+four 32-byte topics, as every EVM and TRON log has. A synthetic log of many
+empty topics costs about 15x its input while its row is built, because each
+topic is formatted into its own string before they are joined; `changes_bounded`
+accepts such a log. Invalid limits or overflow return an error
 without partial output. Row contents, keys, operations and ordinals match
 `changes`.
 

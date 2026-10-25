@@ -146,6 +146,12 @@ can accept the difference if this resolves an issue".
    host the sum cannot wrap, so v0.8.0's own decoders agree with the port
    there. The released-WASM corpus pins each case (see
    [Immutable released-WASM comparison](#immutable-released-wasm-comparison)).
+   The raw-event packages skip their other dynamic-ABI events on the same wrap,
+   under the same decision: CoW `OrderInvalidated` and `PreSignature`, Balancer
+   `LiquidityAdded` and `LiquidityRemoved`, and Trader Joe `DepositedToBins`
+   and `WithdrawnFromBins`, besides the four events above in `cow`,
+   `balancer`, `curvefi` and `sunpump`, and through them
+   `dex/foundational-store`.
 
 ## Port from v0.8.0
 

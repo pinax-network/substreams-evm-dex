@@ -61,8 +61,8 @@ pub fn changes(clock: &Clock, events: &pb::Events, encoding: Encoding) -> Result
 /// partial result is returned on failure. Row contents, keys, operations and
 /// ordinals are identical to [`changes`].
 ///
-/// `max_bytes` bounds encoded bytes, not memory: retained rows hold about 4x
-/// their encoded size, and a rejected block peaks at up to about 9x `max_bytes`.
+/// `max_bytes` bounds encoded bytes, not memory: retained rows hold about 4x their encoded size, and a rejected
+/// block peaks at up to about 9x `max_bytes` for logs of at most four 32-byte topics, as every EVM and TRON log has.
 ///
 /// # Errors
 ///
