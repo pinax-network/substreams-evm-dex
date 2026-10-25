@@ -7,17 +7,25 @@ pub type Pools = BTreeMap<String, Vec<u8>>;
 const IO_LIMIT: usize = 4 * 1024 * 1024;
 const MAX_POOLS: usize = 4096;
 const MAX_POOL_BYTES: usize = 4096;
+const PANIC_TEXT_LIMIT: usize = 4096;
 struct Host {
     limits: StoreLimits,
     pools: Pools,
     calls: usize,
     writable: bool,
     output: Option<Vec<u8>>,
-    panicked: bool,
+    panic: Option<Panic>,
 }
 pub struct Run {
     pub output: Vec<u8>,
     pub pools: Pools,
+}
+/// The panic a module registered before trapping, failing the block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Panic {
+    pub message: String,
+    /// `file:line:column` as the released build recorded it.
+    pub location: String,
 }
 pub struct Oracle {
     engine: Engine,
@@ -80,16 +88,16 @@ impl Oracle {
         );
         Self { engine, pools, swaps, rows }
     }
-    pub fn store(&self, block: &[u8], seed: Pools) -> Option<Run> {
+    pub fn store(&self, block: &[u8], seed: Pools) -> Result<Run, Panic> {
         self.run(&self.pools, "store_pools", &[block], seed, true, false)
     }
-    pub fn swaps(&self, block: &[u8], pools: Pools) -> Option<Run> {
+    pub fn swaps(&self, block: &[u8], pools: Pools) -> Result<Run, Panic> {
         self.run(&self.swaps, "map_events", &[block], pools, false, true)
     }
-    pub fn rows(&self, clock: &[u8], events: &[u8], encoding: &[u8]) -> Option<Run> {
+    pub fn rows(&self, clock: &[u8], events: &[u8], encoding: &[u8]) -> Result<Run, Panic> {
         self.run(&self.rows, "db_out", &[encoding, clock, events], Pools::new(), false, false)
     }
-    fn run(&self, module: &Module, function: &str, inputs: &[&[u8]], pools: Pools, writable: bool, store_input: bool) -> Option<Run> {
+    fn run(&self, module: &Module, function: &str, inputs: &[&[u8]], pools: Pools, writable: bool, store_input: bool) -> Result<Run, Panic> {
         assert!(pools.len() <= MAX_POOLS);
         assert!(pools.iter().all(|(key, value)| !key.is_empty()
             && key.len() <= 64
@@ -103,7 +111,7 @@ impl Oracle {
                 calls: 0,
                 writable,
                 output: None,
-                panicked: false,
+                panic: None,
             },
         );
         store.limiter(|host| &mut host.limits);
@@ -115,8 +123,18 @@ impl Oracle {
             .func_wrap(
                 "env",
                 "register_panic",
-                |mut caller: Caller<'_, Host>, _: i32, _: i32, _: i32, _: i32, _: i32, _: i32| {
-                    caller.data_mut().panicked = true;
+                |mut caller: Caller<'_, Host>, ptr: i32, len: i32, file_ptr: i32, file_len: i32, line: i32, column: i32| -> Result<(), Error> {
+                    let text = |bytes: Vec<u8>| String::from_utf8(bytes).map_err(|_| Error::new("invalid panic text"));
+                    let message = text(read(&caller, ptr, len, PANIC_TEXT_LIMIT)?)?;
+                    let file = text(read(&caller, file_ptr, file_len, PANIC_TEXT_LIMIT)?)?;
+                    if caller.data().panic.is_some() {
+                        return Err(Error::new("repeated panic"));
+                    }
+                    caller.data_mut().panic = Some(Panic {
+                        message,
+                        location: format!("{file}:{}:{}", line as u32, column as u32),
+                    });
+                    Ok(())
                 },
             )
             .unwrap();
@@ -193,14 +211,14 @@ impl Oracle {
             arguments.push(Val::I32(0));
         }
         let result = instance.get_func(&store, function).unwrap().call(&mut store, &arguments, &mut []);
-        if store.data().panicked {
+        if let Some(panic) = store.data().panic.clone() {
             assert!(result.is_err(), "registered panic must trap");
             assert!(store.data().output.is_none(), "panic cannot publish");
-            None
+            Err(panic)
         } else {
             result.unwrap_or_else(|e| panic!("unexpected {function} host/trap/fuel failure: {e}"));
             let host = store.into_data();
-            Some(Run {
+            Ok(Run {
                 output: host.output.unwrap_or_default(),
                 pools: host.pools,
             })

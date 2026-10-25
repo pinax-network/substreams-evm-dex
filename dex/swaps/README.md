@@ -5,7 +5,8 @@ normalized to `dex.swaps.v1.Events`. A port of substreams-evm `dex-swaps` at
 tag `evm-dex-v0.8.0` (`9663b25`), the unified-swaps design the owner chose on
 2026-10-13, to substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output
 is unchanged, including the v0.8.0 behaviour listed under
-[Kept from v0.8.0](#kept-from-v080).
+[Kept from v0.8.0](#kept-from-v080), except for one
+[accepted difference](#accepted-differences-from-v080).
 
 `map_events(Block, dex_pools:store_pools)` reads pool metadata from the
 [`dex/pools`](../pools/README.md) store (imported as a local manifest) and
@@ -48,10 +49,12 @@ once per key of the block: every receipt-log emitter, plus the pools named by V4
 and Balancer swaps and the SunPump trade tokens. `eth`, `pb` and `Pool`
 re-export the input and output types.
 
-`project` fails the block where v0.8.0 panicked: a successful transaction
-without a receipt, or a fee above `u64::MAX` in a Curve `CommitNewFee`,
-`NewFee`, `PlainPoolDeployed` or `MetaPoolDeployed`, or a SunPump
-`PurchaseFeeSet` or `SaleFeeSet` log.
+`project` fails the block where v0.8.0 panicked on these: a successful
+transaction without a receipt, or a fee above `u64::MAX` in a Curve
+`CommitNewFee`, `NewFee`, `PlainPoolDeployed` or `MetaPoolDeployed`, or a
+SunPump `PurchaseFeeSet` or `SaleFeeSet` log. v0.8.0's wasm32 build also
+panicked on malformed dynamic ABI data in four events; `project` skips such a
+log instead (see [Accepted differences](#accepted-differences-from-v080)).
 
 ### Optional candidate diagnostics
 
@@ -87,9 +90,9 @@ when those sources differ. A failed block returns no partial diagnostics.
 
 ## Kept from v0.8.0
 
-The port reproduces v0.8.0's output exactly, including behaviour that looks
-wrong. Each item has a test that pins it; changing one is a separate,
-owner-approved change.
+The port reproduces v0.8.0's output exactly for every block v0.8.0 accepts,
+including behaviour that looks wrong. Each item has a test that pins it;
+changing one is a separate, owner-approved change.
 
 1. **Uniswap V3 and Kyber Elastic share `Swap` and `PoolCreated` signatures.**
    Every decoder runs on every log, so a swap in any stored pool emits a
@@ -116,6 +119,33 @@ owner-approved change.
    deployment and SunPump fee events need no stored pool, any contract can fail
    a block (v0.8.0: panic; port: error) by emitting one with a fee above
    `u64::MAX`.
+8. **Fee conversions that never fail.** A Balancer
+   `SwapFeePercentageChanged` or `AggregateSwapFeePercentageChanged` fee above
+   `u64::MAX` is written as 0 bps (`unwrap_or_default()` before the division).
+   A Uniswap V3 `PoolCreated` or V4 `Initialize` fee is
+   `unwrap_or_default() as u32`: 0 above `u64::MAX`, the low 32 bits above
+   `u32::MAX`. Neither fails the block, unlike the Curve and SunPump fees of
+   item 7.
+
+## Accepted differences from v0.8.0
+
+The owner, Denis Carriere, decided on 2026-10-25 not to replicate one v0.8.0
+block failure: "Not sure, I don't think we should replicate block failure, we
+can accept the difference if this resolves an issue".
+
+1. **Malformed dynamic ABI data.** v0.8.0's WASM decodes with ethabi 17.2,
+   which checks `offset + len` in 32-bit `usize`. An offset or length word near
+   `u32::MAX` wraps that sum, passes the check, and the slice panics, so the
+   block fails. The substreams-abis v2.0.0 readers use checked arithmetic and
+   reject the field, and the decoders skip the log. This affects the CoW
+   `Trade` `orderUid`, Balancer V3 `PoolRegistered` token configs, Curve
+   `PlainPoolDeployed` coins and SunPump legacy `TokenCreate` name and symbol,
+   from any emitter. v0.8.0's `map_events` panicked on all four, and its
+   `store_pools` on the last three. The port keeps the block; its other logs
+   still yield pools, events and rows that v0.8.0 never emitted. On a 64-bit
+   host the sum cannot wrap, so v0.8.0's own decoders agree with the port
+   there. The released-WASM corpus pins each case (see
+   [Immutable released-WASM comparison](#immutable-released-wasm-comparison)).
 
 ## Port from v0.8.0
 
@@ -137,9 +167,12 @@ Every source file comes from substreams-evm `9663b25` (tag `evm-dex-v0.8.0`):
 
 The tests in `common/src/create.rs` port `common/tests/create_log_tests.rs`;
 `logs.rs` keeps v0.8.0's key-encoding test. substreams-abis v2.0.0 replaces
-v1.5.0's `ethabi` decoding with readers that keep its accept/reject rules;
-every event used here has the same topic 0 and `match_log` rules in both
-versions, and the decoders are only reached through `match_and_decode`.
+v1.5.0's `ethabi` decoding with readers that keep its accept/reject rules on a
+64-bit host. On wasm32, where v0.8.0 ran, ethabi's bounds check wraps for
+offsets and lengths near `u32::MAX` and panics; the readers reject those
+fields (the [accepted difference](#accepted-differences-from-v080)). Every
+event used here has the same topic 0 and `match_log` rules in both versions,
+and the decoders are only reached through `match_and_decode`.
 
 ## Validation
 
@@ -152,8 +185,9 @@ lookup requests and event bytes. A
 differential run on 2026-10-13 fed 120,000 random synthetic blocks to this
 crate and to v0.8.0's decoders (prost, substreams 0.7.6, substreams-abis
 v1.5.0): byte-identical `map_events` output, and the same blocks failing (see
-the pull request). No captured-block fixture or live run backs this package
-yet.
+the pull request). It ran both natively on a 64-bit host, so it could not see
+the wasm32 ethabi panics; the released-WASM corpus below does. No
+captured-block fixture or live run backs this package yet.
 
 ## Build
 
@@ -170,11 +204,17 @@ Committed spkgs come from CI's Linux build, never a local pack.
 ## Immutable released-WASM comparison
 
 The [v0.8.0 oracle corpus](tests/fixtures/legacy-v0.8.0/README.md)
-executes the actual released pool store, swap map and database formatter. Its 73
-synthetic cases cover every supported swap protocol, metadata boundaries,
-first-writer behavior and both address encodings. Seventy-one cases agree in
-state/events/row fields and order; two reject in both implementations (old WASM
-panic, native error). It retains every known v0.8.0 behavior. The frozen corpus
-and binary hashes are checked offline with `cargo test --locked -p dex-swaps
+executes the actual released pool store, swap map and database formatter. Its
+107 synthetic cases cover every supported swap protocol, pool creation by every
+`dex/pools` collector, fee and initialization events, metadata boundaries,
+first-writer behavior, several transactions in a block, a contract-creation
+transaction and both address encodings. Ninety-nine cases agree in pool state,
+events and rows; two reject in both implementations (old WASM panic, native
+error). The other six are the
+[accepted difference](#accepted-differences-from-v080): the old WASM panics
+on malformed dynamic ABI data, and the native result equals the old WASM's
+for the same block without that log. Every other behavior listed under
+[Kept from v0.8.0](#kept-from-v080) is kept. The frozen corpus and binary
+hashes are checked offline with `cargo test --locked -p dex-swaps
 released_v080`; Wasmi is a dev dependency only. This does not establish live
 or captured-block coverage or parity with the Token API's older v0.5.0 sinks.
