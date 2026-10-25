@@ -34,8 +34,12 @@ jobs:
       - name: Keep the historical interpreter out of shipped dependencies
         run: |
           cargo tree --locked --workspace --target all --edges normal,build --prefix none > "$RUNNER_TEMP/runtime-dependencies.txt"
-          if grep -Eq '^wasmi([_-][[:alnum:]_-]+)? v' "$RUNNER_TEMP/runtime-dependencies.txt"; then
-            cargo tree --locked --workspace --target all --edges normal,build --invert wasmi
+          if grep -E '^wasmi([_-][[:alnum:]_-]+)? v' "$RUNNER_TEMP/runtime-dependencies.txt" > "$RUNNER_TEMP/wasmi.txt"; then
+            sort -u "$RUNNER_TEMP/wasmi.txt"
+            # A wasmi_* crate can be reached without wasmi itself: invert each match.
+            for package in $(awk '{ print $1 "@" substr($2, 2) }' "$RUNNER_TEMP/wasmi.txt" | sort -u); do
+              cargo tree --locked --workspace --target all --edges normal,build --invert "$package"
+            done
             exit 1
           fi
       - name: Clippy
