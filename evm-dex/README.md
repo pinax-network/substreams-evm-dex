@@ -187,11 +187,18 @@ the release spkg. Tron needs the `db_out` param `tron_base58`.
 ## Immutable released-WASM comparison
 
 The [v0.8.0 oracle corpus](../dex/swaps/tests/fixtures/legacy-v0.8.0/README.md)
-executes the actual released pool store, swap map and database formatter. Its 73
-synthetic cases cover every supported swap protocol, metadata boundaries,
-first-writer behavior and both address encodings. Seventy-one cases agree in
-state/events/row fields and order; two reject in both implementations (old WASM
-panic, native error). It retains every known v0.8.0 behavior. The frozen corpus
+executes the actual released pool store, swap map and database formatter. Its
+107 synthetic cases cover every supported swap protocol, pool creation by every
+`dex/pools` collector, fee and initialization rows, metadata boundaries,
+first-writer behavior, several transactions in a block, a contract-creation
+transaction and both address encodings. Ninety-nine cases agree in pool state,
+events and row fields, keys, operations, ordinals and order; two reject in both
+implementations (old WASM panic, native error). The other six are the accepted
+difference of [`dex/swaps`](../dex/swaps/README.md#accepted-differences-from-v080):
+the old WASM fails the block on malformed dynamic ABI data, while the native
+path skips that log and writes the old WASM's rows for the block without it,
+in one case `swaps` and `blocks` rows that v0.8.0 never wrote. Every behavior
+listed under [Kept from v0.8.0](#kept-from-v080) is kept. The frozen corpus
 and binary hashes are checked offline with `cargo test --locked -p dex-swaps
 released_v080`; Wasmi is a dev dependency only. This does not establish live
 or captured-block coverage or parity with the Token API's older v0.5.0 sinks.

@@ -28,11 +28,14 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Offline regression tests
         run: cargo test --locked --workspace --lib --bins --tests
-      - name: Keep the historical interpreter out of extraction dependencies
+      # The v0.8.0 oracle's interpreter is a dev dependency: no workspace crate
+      # may reach wasmi (or its wasmi_* crates) through a normal or build edge,
+      # on any target.
+      - name: Keep the historical interpreter out of shipped dependencies
         run: |
-          cargo tree --locked -p dex-swaps --edges normal,build > "$RUNNER_TEMP/dex-runtime-dependencies.txt"
-          if grep -Eq '(^|[[:space:]])wasmi([_-][[:alnum:]_-]+)? v' "$RUNNER_TEMP/dex-runtime-dependencies.txt"; then
-            cat "$RUNNER_TEMP/dex-runtime-dependencies.txt"
+          cargo tree --locked --workspace --target all --edges normal,build --prefix none > "$RUNNER_TEMP/runtime-dependencies.txt"
+          if grep -Eq '^wasmi([_-][[:alnum:]_-]+)? v' "$RUNNER_TEMP/runtime-dependencies.txt"; then
+            cargo tree --locked --workspace --target all --edges normal,build --invert wasmi
             exit 1
           fi
       - name: Clippy
