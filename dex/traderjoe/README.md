@@ -1,6 +1,6 @@
 # Trader Joe V2 (Liquidity Book) events
 
-Trader Joe V2 Liquidity Book pair and factory events. Each packed `bytes32` amount is split into two `uint128` decimal strings, `*_x` from the high and `*_y` from the low 128 bits; `DepositedToBins` and `WithdrawnFromBins` keep the packed words. A port of substreams-evm `dex/traderjoe` at tag `evm-dex-v0.8.0` (`9663b25`) to substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output is unchanged, including the v0.8.0 behaviour listed under [Kept from v0.8.0](#kept-from-v080).
+Trader Joe V2 Liquidity Book pair and factory events. Each packed `bytes32` amount is split into two `uint128` decimal strings, `*_x` from the high and `*_y` from the low 128 bits; `DepositedToBins` and `WithdrawnFromBins` keep the packed words. A port of substreams-evm `dex/traderjoe` at tag `evm-dex-v0.8.0` (`9663b25`) to substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output is unchanged for every block v0.8.0 accepts, including the v0.8.0 behaviour listed under [Kept from v0.8.0](#kept-from-v080); the blocks v0.8.0 failed on malformed dynamic ABI data are an [accepted difference](../swaps/README.md#accepted-differences-from-v080) (see [Port from v0.8.0](#port-from-v080)).
 
 `map_events(Block)` emits `traderjoe.v1.Events`: per successful transaction with at least one decoded log, the transaction, then each decoded log with its raw fields (address, ordinal, topics, data, block index), its emitting call (when the block has call traces; otherwise the receipt's logs, with no call) and the decoded event. Every emitter counts: nothing checks that a log comes from a known contract.
 
@@ -24,7 +24,7 @@ Amounts are exact decimal strings; addresses and hashes are raw bytes.
 
 ## Kept from v0.8.0
 
-The port reproduces v0.8.0's output exactly, including behaviour that looks wrong; changing it is a separate, owner-approved change.
+The port reproduces v0.8.0's output exactly for every block v0.8.0 accepts, including behaviour that looks wrong; changing it is a separate, owner-approved change.
 
 1. **X and Y are probably swapped.** v0.8.0 reads the high 128 bits of a packed amount as X. Liquidity Book packs X in the low 128 bits (`dex/swaps` README, item 3), so `amount_in_x` probably holds the Y amount and the reverse.
 2. **Narrow fields wrap.** `id`, `volatility_accumulator`, `bin_step` and `pid` are `to_u64() as u32`: a value above `u32::MAX` keeps its low 32 bits (a malformed log only).
@@ -50,9 +50,9 @@ v0.8.0's `dex/traderjoe/README.md` documented the upper-is-X layout this package
 
 Differences from v0.8.0:
 
-- Where v0.8.0 panicked, `project` returns an error; the block fails either way.
-- substreams-abis v2.0.0's readers replace v1.5.0's `ethabi` decoding and keep its accept/reject rules; every event above has the same topic 0, fields and `match_log` rules (topic count, data length) in both versions.
-- On wasm32 only (by inspection of `ethabi` 17.2's decoder, not exercised): v1.5.0's `ethabi` adds offsets and lengths read from the log in a 32-bit `usize` without a check, so a `DepositedToBins` or `WithdrawnFromBins` log whose offset or length makes that sum wrap (an offset within 32 of `u32::MAX`, for one) made v0.8.0 panic, failing the block; v2.0.0's readers reject the log, so the port skips it. On a 64-bit host both reject it, which is what the differential run below compares.
+- Where v0.8.0 panicked, `project` returns an error; the block fails either way, except for the wasm32 decoding panic below.
+- substreams-abis v2.0.0's readers replace v1.5.0's `ethabi` decoding and keep its accept/reject rules on a 64-bit host; every event above has the same topic 0, fields and `match_log` rules (topic count, data length) in both versions.
+- On wasm32, where the released v0.8.0 ran, it rejects the block instead: v1.5.0's `ethabi` adds offsets and lengths read from the log in a 32-bit `usize` without an overflow check, so a `DepositedToBins` or `WithdrawnFromBins` log whose offset or length makes that sum wrap (an offset within 32 of `u32::MAX`, for one) made v0.8.0 panic, failing the block. v2.0.0's readers reject the log, so the port skips it and keeps the block: the [accepted difference](../swaps/README.md#accepted-differences-from-v080) the owner chose on 2026-10-25. This follows from `ethabi` 17.2's decoder; no released WASM has run such a log. On a 64-bit host both reject the log, which is what the differential run below compares.
 
 ## Validation
 

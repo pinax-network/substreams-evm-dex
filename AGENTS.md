@@ -41,6 +41,8 @@ and taking over the DEX code of `pinax-network/substreams-evm`.
   `dex/foundational-store` are ported the same way, from tag
   `evm-dex-v0.8.0`, and likewise keep v0.8.0's output (each README's "Kept
   from v0.8.0").
+- Both keep it for every block v0.8.0 accepts; the one exception is in
+  [Accepted differences from v0.8.0](dex/swaps/README.md#accepted-differences-from-v080).
 
 ## Toolchain and validation
 

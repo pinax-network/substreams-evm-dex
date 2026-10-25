@@ -8,8 +8,8 @@ No current source is rebuilt to stand in for the old decoder.
 - `db_out` module hash with packaged `hex` params: `55c511daf545d0315295b98c2eb0838c2420bd8e`.
 - `db:dex_swaps:map_events` module hash: `4673bc775b026a055eb6b76b0b8622515049dbd1`.
 - `db:dex_swaps:dex_swaps_pools:store_pools` module hash: `c8c9d7f8c649b83cacba094f7ae550a37ad9defe`.
-- Frozen corpus SHA-256: `f44480bedb57518c159f5140b0942fa27db6152edb86de45496b68950395aac1`
-  (schema version 2, 107 cases).
+- Frozen corpus SHA-256: `82800f461596f77666cfe5ace4cad44559295f9a1cc34f93eaa0ea680445fe6c`
+  (schema version 2, 108 cases).
 
 | Binary | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -32,7 +32,7 @@ compares its rows, keys and operations with the corpus's `rows` and `row_keys`,
 which must equal the live historical and native results, so editing a frozen
 operation from CREATE to UPDATE fails the test.
 
-The 107 synthetic cases cover:
+The 108 synthetic cases cover:
 
 - all 14 supported swap protocols with known pools, missing metadata, empty
   token vectors and malformed token widths, and the stateless protocols;
@@ -47,7 +47,8 @@ The 107 synthetic cases cover:
 - fee and initialization rows of every protocol that writes them, including
   Curve and SunPump fees above `u32::MAX`, a Balancer fee above `u64::MAX`
   (0 bps), Uniswap V3 and V4 fees above `u32::MAX` and `u64::MAX`, and the
-  Balancer aggregate fee with and without a swap naming the pool;
+  Balancer aggregate fee, kept when the pool's own fee logs or a swap make it
+  a lookup key and dropped when only the vault's event names it;
 - receipt fallback and receipt/call preload disagreement; failed, reverted and
   nested reverted execution; maximum integer amounts and ambiguous directions;
   V4 initialization lookup behavior; a pool with one token;
@@ -60,7 +61,7 @@ The 107 synthetic cases cover:
 
 Each case records its `outcome`:
 
-- `agree` (99 cases): same pool state, events and rows.
+- `agree` (100 cases): same pool state, events and rows.
 - `rejected` (2 cases, also `"rejected": true`): missing receipts and
   overflowing Curve fees. The historical WASM panics and the native API returns
   an error, both rejecting the block. `historical_panics` records the panic.

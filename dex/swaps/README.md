@@ -146,6 +146,12 @@ can accept the difference if this resolves an issue".
    host the sum cannot wrap, so v0.8.0's own decoders agree with the port
    there. The released-WASM corpus pins each case (see
    [Immutable released-WASM comparison](#immutable-released-wasm-comparison)).
+   The raw-event packages skip their other dynamic-ABI events on the same wrap,
+   under the same decision: CoW `OrderInvalidated` and `PreSignature`, Balancer
+   `LiquidityAdded` and `LiquidityRemoved`, and Trader Joe `DepositedToBins`
+   and `WithdrawnFromBins`, besides the four events above in `cow`,
+   `balancer`, `curvefi` and `sunpump`, and through them
+   `dex/foundational-store`.
 
 ## Port from v0.8.0
 
@@ -205,10 +211,10 @@ Committed spkgs come from CI's Linux build, never a local pack.
 
 The [v0.8.0 oracle corpus](tests/fixtures/legacy-v0.8.0/README.md)
 executes the actual released pool store, swap map and database formatter. Its
-107 synthetic cases cover every supported swap protocol, pool creation by every
+108 synthetic cases cover every supported swap protocol, pool creation by every
 `dex/pools` collector, fee and initialization events, metadata boundaries,
 first-writer behavior, several transactions in a block, a contract-creation
-transaction and both address encodings. Ninety-nine cases agree in pool state,
+transaction and both address encodings. A hundred cases agree in pool state,
 events and rows; two reject in both implementations (old WASM panic, native
 error). The other six are the
 [accepted difference](#accepted-differences-from-v080): the old WASM panics

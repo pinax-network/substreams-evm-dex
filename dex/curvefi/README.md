@@ -1,6 +1,6 @@
 # CurveFi events
 
-CurveFi pool (StableSwap), factory, CryptoSwap and CryptoSwap factory events, plus `Init`: a pool deployed directly (not by a factory), decoded from its StableSwap constructor arguments. Each log is decoded as the first event of the table it matches (v0.8.0's `continue`). `Init` is a synthetic log (no topics, no data; ordinal from the root CREATE call, block index 0, the CREATE call's metadata) placed before the transaction's decoded logs. A port of substreams-evm `dex/curvefi` at tag `evm-dex-v0.8.0` (`9663b25`) to substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output is unchanged, including the v0.8.0 behaviour listed under [Kept from v0.8.0](#kept-from-v080).
+CurveFi pool (StableSwap), factory, CryptoSwap and CryptoSwap factory events, plus `Init`: a pool deployed directly (not by a factory), decoded from its StableSwap constructor arguments. Each log is decoded as the first event of the table it matches (v0.8.0's `continue`). `Init` is a synthetic log (no topics, no data; ordinal from the root CREATE call, block index 0, the CREATE call's metadata) placed before the transaction's decoded logs. A port of substreams-evm `dex/curvefi` at tag `evm-dex-v0.8.0` (`9663b25`) to substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output is unchanged for every block v0.8.0 accepts, including the v0.8.0 behaviour listed under [Kept from v0.8.0](#kept-from-v080); the blocks v0.8.0 failed on malformed dynamic ABI data are an [accepted difference](../swaps/README.md#accepted-differences-from-v080) (see [Port from v0.8.0](#port-from-v080)).
 
 `map_events(Block)` emits `curvefi.v1.Events`: per successful transaction with at least one decoded log, the transaction, then each decoded log with its raw fields (address, ordinal, topics, data, block index), its emitting call (when the block has call traces; otherwise the receipt's logs, with no call) and the decoded event. Every emitter counts: nothing checks that a log comes from a known contract.
 
@@ -36,7 +36,7 @@ Amounts are exact decimal strings; addresses and hashes are raw bytes.
 
 ## Kept from v0.8.0
 
-The port reproduces v0.8.0's output exactly, including behaviour that looks wrong; changing it is a separate, owner-approved change.
+The port reproduces v0.8.0's output exactly for every block v0.8.0 accepts, including behaviour that looks wrong; changing it is a separate, owner-approved change.
 
 1. **`Init` for nearly every contract creation.** v0.8.0 decodes the last 256 bytes of any successful transaction with a root CREATE call (depth 0) as a StableSwap constructor. `ethabi` accepts any 256 bytes there (it does not check address padding), so every deployment with at least 256 bytes of input emits an `Init` with arbitrary coins, not only Curve pools; v0.8.0's README claims a padding check its code does not make.
 2. **Factory deployments name the first CREATE.** `PlainPoolDeployed`, `MetaPoolDeployed` and `CryptoPoolDeployed` take the address of the transaction's first CREATE call (any depth, reverted or not); a deployment without one is matched but dropped.
@@ -61,9 +61,9 @@ v0.8.0's `dex/curvefi/README.md` described the module as TRON-only and claimed t
 
 Differences from v0.8.0:
 
-- Where v0.8.0 panicked, `project` returns an error; the block fails either way.
-- substreams-abis v2.0.0's readers replace v1.5.0's `ethabi` decoding and keep its accept/reject rules; every event above has the same topic 0, fields and `match_log` rules (topic count, data length) in both versions.
-- On wasm32 only (by inspection of `ethabi` 17.2's decoder, not exercised): v1.5.0's `ethabi` adds offsets and lengths read from the log in a 32-bit `usize` without a check, so a `PlainPoolDeployed` log whose offset or length makes that sum wrap (an offset within 32 of `u32::MAX`, for one) made v0.8.0 panic, failing the block; v2.0.0's readers reject the log, so the port skips it. On a 64-bit host both reject it, which is what the differential run below compares.
+- Where v0.8.0 panicked, `project` returns an error; the block fails either way, except for the wasm32 decoding panic below.
+- substreams-abis v2.0.0's readers replace v1.5.0's `ethabi` decoding and keep its accept/reject rules on a 64-bit host; every event above has the same topic 0, fields and `match_log` rules (topic count, data length) in both versions.
+- On wasm32, where the released v0.8.0 ran, it rejects the block instead: v1.5.0's `ethabi` adds offsets and lengths read from the log in a 32-bit `usize` without an overflow check, so a `PlainPoolDeployed` log whose offset or length makes that sum wrap (an offset within 32 of `u32::MAX`, for one) made v0.8.0 panic, failing the block. v2.0.0's readers reject the log, so the port skips it and keeps the block: the [accepted difference](../swaps/README.md#accepted-differences-from-v080) the owner chose on 2026-10-25. This package's v0.8.0 WASM was not run, but the released `dex-swaps` WASM, with the same `ethabi` decoder, panics this way on such a `PlainPoolDeployed` in the [released-WASM corpus](../swaps/README.md#immutable-released-wasm-comparison). On a 64-bit host both reject the log, which is what the differential run below compares.
 - `PlainPoolDeployed.A` and `MetaPoolDeployed.A` keep their proto name in Rust (prost had `a`); the wire format is unchanged.
 
 ## Validation
