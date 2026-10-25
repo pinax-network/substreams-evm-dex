@@ -3,7 +3,9 @@
 Pool metadata (`tokens[]` plus `factory` when known) from DEX pool creations,
 kept in a `set_if_not_exists` store that `dex/swaps` reads. A port of
 substreams-evm `dex-swaps-pools` at tag `evm-dex-v0.8.0` (`9663b25`) to
-substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output is unchanged.
+substreams 0.8.0, buffa and substreams-abis v2.0.0. Its output is unchanged
+for every block v0.8.0 accepts; see the deviations below for the blocks it
+failed.
 
 | Module | Kind | Output |
 | --- | --- | --- |
@@ -56,13 +58,21 @@ Every source file comes from substreams-evm `9663b25` (tag `evm-dex-v0.8.0`):
 | `substreams.yaml` | `dex-swaps-pools/substreams.yaml` | package `dex_pools` (was `dex_swaps_pools`), version v0.9.0, repository paths; same modules |
 | `../../proto/v1/dex/foundational-store.proto` | `proto/v1/dex/foundational-store.proto` | none (byte-identical) |
 
-Deviations, none of which changes an output:
+Deviations, none of which changes the output of a block v0.8.0 accepts:
 
 - A successful transaction with neither call traces nor a receipt fails the
   block with an error. v0.8.0 panicked there, which also failed the block.
 - substreams-abis v1.5.0 decoded with `ethabi`; v2.0.0 has its own readers,
-  which keep `ethabi`'s accept/reject rules. Every event used here has the same
-  topic 0 and `match_log` rules (topic count, data length) in both versions.
+  which keep `ethabi`'s accept/reject rules on a 64-bit host. Every event used
+  here has the same topic 0 and `match_log` rules (topic count, data length) in
+  both versions.
+- On wasm32, where v0.8.0 ran, ethabi's bounds check wraps for an offset or
+  length word near `u32::MAX`: `store_pools` panicked on such a Balancer V3
+  `PoolRegistered`, Curve `PlainPoolDeployed` or SunPump legacy `TokenCreate`
+  and failed the block. The readers reject the field and the log yields no
+  pool, so the block's other pools are still stored. The owner accepted this
+  difference on 2026-10-25 (see
+  [`dex/swaps`](../swaps/README.md#accepted-differences-from-v080)).
 
 ## Validation
 
@@ -71,8 +81,11 @@ of the canonical event signature, for every collector above, and checks
 `project` against the store and map modules on an empty store. A differential
 run on 2026-10-13 compared this crate with v0.8.0's collectors on 120,000
 random synthetic blocks (see the pull request): identical `map_pools` output
-and store contents. No captured-block fixture or live run backs this package
-yet.
+and store contents. It ran natively on a 64-bit host, where the wasm32 panics
+above cannot occur. The released-WASM corpus of
+[`dex/swaps`](../swaps/README.md#immutable-released-wasm-comparison) covers
+them, and compares the released `store_pools` with `project` for every
+collector. No captured-block fixture or live run backs this package yet.
 
 ## Build
 
